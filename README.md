@@ -10,6 +10,7 @@
 |---|---|
 | 문제 정의서 | [docs/01_문제정의서.md](docs/01_문제정의서.md) |
 | PoC 코드 + 모델 선정 근거 | [agent/](agent/), [app.py](app.py), [docs/02_모델선정근거.md](docs/02_모델선정근거.md) |
+| 사용 AI | **Google ADK + Gemini (무료 티어, 기본)** · Claude API (유료, 선택) · 규칙 기반 기준선 |
 | 개선 효과 검증 | [docs/03_개선효과검증.md](docs/03_개선효과검증.md), [eval/](eval/) |
 | 실행 방법·시연 | 이 문서 |
 
@@ -28,7 +29,7 @@
 
 ## 2. 동작 구조 (단일 Agent)
 ```
-[입력] ─▶ ① 입력 검증 ─▶ ② Claude 구조화 분석 (Pydantic 스키마 강제 출력)
+[입력] ─▶ ① 입력 검증 ─▶ ② ADK LlmAgent(Gemini) 구조화 분석 (Pydantic output_schema 강제)
                               · 요구사항 구조화 · 누락 정보 식별 · 질문 생성
         ─▶ ③ 가드레일 검증 (원문 인용 대조, 질문 중복/10개 제한)
         ─▶ ④ 보고서 표시 / Markdown 다운로드
@@ -38,7 +39,8 @@
 app.py                  Streamlit 화면
 agent/schema.py         보고서 스키마 (확인/추정/미확인 + 근거)
 agent/prompts.py        시스템 프롬프트(분석 원칙)
-agent/analyzer.py       Agent 본체: Claude 호출, 오류 처리
+agent/analyzer.py       Agent 절차(검증→분석→가드레일), 엔진 선택, Claude 호출(선택)
+agent/adk_agent.py      Google ADK LlmAgent + Gemini 호출 (기본 엔진)
 agent/guardrails.py     사실 확정 오류 자동 교정
 agent/baseline.py       규칙 기반 비교 기준선 / 데모 모드
 agent/report.py         Markdown 보고서 생성
@@ -54,16 +56,25 @@ pip install -r requirements.txt
 > Windows의 '스마트 앱 컨트롤'이 켜져 있으면 일부 최신 패키지 DLL(jiter, numpy)이 차단될 수 있습니다.
 > requirements.txt는 차단되지 않는 jiter 버전으로 고정했고, 화면은 numpy 없이 동작하도록 만들었습니다.
 
-### 3-2. API 키 설정 (소스코드에 넣지 않음)
-PowerShell:
+### 3-2. 무료 Gemini API 키 설정 (소스코드에 넣지 않음)
+1. https://aistudio.google.com/apikey 에서 Google 계정으로 로그인 → **Create API key** (결제 정보 불필요, 무료 티어)
+2. 환경변수 설정
+
+PowerShell (현재 창만):
 ```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
+$env:GOOGLE_API_KEY = "AIza..."
+```
+PowerShell (영구 저장, 새 터미널부터 적용):
+```powershell
+[Environment]::SetEnvironmentVariable("GOOGLE_API_KEY", "AIza...", "User")
 ```
 macOS/Linux:
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export GOOGLE_API_KEY=AIza...
 ```
-API 키가 없으면 **규칙 기반 데모 모드**(AI 미사용)로만 화면이 동작합니다.
+- 기본 모델은 `gemini-3.8-flash`(무료 티어). 무료 한도(분당·일일 요청 수)를 넘으면 `GEMINI_MODEL=gemini-3.5-flash-lite`처럼 바꿔 쓸 수 있습니다.
+- 무료 티어는 입력 내용이 Google 제품 개선에 활용될 수 있으므로 **가상·익명 사례만** 입력하세요.
+- 키가 없으면 **규칙 기반 데모 모드**(AI 미사용)로만 동작합니다. `ANTHROPIC_API_KEY`가 있으면 Claude(유료)도 선택할 수 있습니다.
 
 ### 3-3. 웹앱 실행
 ```bash
@@ -73,7 +84,7 @@ streamlit run app.py
 
 ### 3-4. 평가 재현
 ```bash
-python eval/run_eval.py --mode claude
+python eval/run_eval.py --mode gemini
 ```
 ```bash
 python eval/run_eval.py --mode demo
@@ -81,12 +92,13 @@ python eval/run_eval.py --mode demo
 결과: `eval/results/<mode>/` 에 사례별 JSON·Markdown 보고서와 `summary.md`(지표 표).
 
 ## 4. 시연
-> 스크린샷은 `docs/images/`에 저장해 아래에 연결합니다. (Claude 모드 실행 후 캡처)
+> 스크린샷은 `docs/images/`에 저장해 아래에 연결합니다. (Gemini 모드 실행 후 캡처)
 - 입력 화면 / 분석 진행 상태 / 보고서(확인·추정 배지) / 추가 질문 답변 후 갱신 / Markdown 다운로드
 
 ## 5. 보안·개인정보
-- 가상 또는 익명화된 업무 사례만 사용합니다. 입력은 저장하지 않으며(세션 메모리에만 존재), 분석을 위해 Anthropic API로 전송됩니다.
+- 가상 또는 익명화된 업무 사례만 사용합니다. 입력은 저장하지 않으며(세션 메모리에만 존재), 분석을 위해 선택한 AI 서비스(기본: Google Gemini API)로 전송됩니다.
 - API 키는 환경변수로만 관리합니다.
+- Gemini **무료 티어는 입력이 Google의 제품 개선에 사용될 수 있어** 실제 사내 데이터에는 부적합합니다. 실제 도입 시 유료 티어 또는 사내 승인된 모델이 필요합니다.
 - AI 결과는 **참고용 초안**이며 사람의 검토가 필요하다는 안내를 화면과 보고서에 표시합니다.
 
 ## 6. 한계 및 다음 단계

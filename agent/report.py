@@ -23,7 +23,7 @@ def to_markdown(result: AnalysisResult, answers: list | None = None) -> str:
     r = result.report
     md = [f"# 업무 개선 요청 분석 보고서 — {r.task_name}", "",
           f"- 작성일시: {datetime.now():%Y-%m-%d %H:%M}",
-          f"- 분석 엔진: {result.model} ({'AI 분석' if result.mode == 'claude' else '규칙 기반 데모'})",
+          f"- 분석 엔진: {result.model} ({'규칙 기반 데모' if result.mode == 'demo' else 'AI 분석'})",
           f"- 추가 답변 반영: {len(answers or [])}건", "", DISCLAIMER, "",
           "## 1. 업무 개요", r.summary, "",
           f"**업무 목적**: {BADGE[r.task_purpose.status]} {r.task_purpose.content}", "",

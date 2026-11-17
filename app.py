@@ -7,7 +7,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from agent import AnalysisError, analyze, has_api_key, to_markdown, validate_input
+from agent import ENGINE_LABELS, AnalysisError, analyze, available_engines, to_markdown, validate_input
 from agent.report import BADGE, DISCLAIMER, _esc
 
 st.set_page_config(page_title="AI 업무 개선 요청 분석 Assistant", page_icon="🧭", layout="wide")
@@ -30,7 +30,7 @@ def run(answers):
                 answers=answers or None, mode=ss.mode)
     ss.last_args = args
     try:
-        with st.status("AI Assistant가 요청을 분석하고 있습니다… (보통 20~60초)", expanded=True) as status:
+        with st.status(f"AI Assistant가 요청을 분석하고 있습니다… [{ENGINE_LABELS[ss.mode]}] (보통 10~60초)", expanded=True) as status:
             st.write("① 입력 검증 완료")
             st.write("② 요구사항 구조화 · 누락 정보 식별 · 질문 생성 중…")
             ss.result = analyze(**args)
@@ -56,21 +56,21 @@ def table(rows):
 # ---------------- Sidebar ----------------
 with st.sidebar:
     st.header("⚙️ 설정")
-    key_ok = has_api_key()
-    if key_ok:
-        st.success("Claude API 키 감지됨")
+    engines = available_engines()
+    if "gemini" in engines:
+        st.success("Google API 키 감지됨 — Gemini(무료) 분석 사용 가능")
     else:
-        st.warning("ANTHROPIC_API_KEY 환경변수가 없습니다. 규칙 기반 데모 모드로만 동작합니다.")
-    ss.mode = st.radio("분석 엔진", ["claude", "demo"], index=0 if key_ok else 1,
-                       format_func=lambda m: "Claude AI 분석" if m == "claude" else "규칙 기반 데모 (AI 미사용)",
-                       disabled=not key_ok)
+        st.warning("GOOGLE_API_KEY 환경변수가 없습니다. Google AI Studio에서 무료 키를 발급해 설정하세요. "
+                   "지금은 규칙 기반 데모 모드로만 동작합니다.")
+    ss.mode = st.radio("분석 엔진", engines, format_func=lambda m: ENGINE_LABELS[m])
     st.divider()
     st.subheader("📂 샘플 업무 사례")
     st.selectbox("테스트 사례 선택", [f"{s['id']} {s['title']}" for s in SAMPLES], key="sample_pick")
     st.button("샘플 불러오기", on_click=load_sample, use_container_width=True)
     st.divider()
     st.caption("🔒 가상·익명화된 업무 사례만 입력하세요. 실제 기밀정보·개인정보는 입력하지 마세요. "
-               "입력 내용은 저장되지 않으며, 분석을 위해 Anthropic API로 전송됩니다.")
+               "입력 내용은 저장되지 않으며, 분석을 위해 선택한 AI 서비스(Google Gemini 등)로 전송됩니다. "
+               "Gemini 무료 티어는 입력이 Google 제품 개선에 활용될 수 있습니다.")
 
 # ---------------- Main: 입력 (F01) ----------------
 st.title("🧭 AI 업무 개선 요청 분석 Assistant")
@@ -106,7 +106,7 @@ if res:
     st.divider()
     st.subheader(f"📄 분석 보고서 — {r.task_name}")
     if res.mode == "demo":
-        st.info("현재 결과는 **규칙 기반 데모 모드**(AI 미사용)입니다. Claude 분석과 비교용 기준선입니다.")
+        st.info("현재 결과는 **규칙 기반 데모 모드**(AI 미사용)입니다. AI 분석과 비교하기 위한 기준선입니다.")
     st.markdown(DISCLAIMER)
 
     c = st.columns(5)

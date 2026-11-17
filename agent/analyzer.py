@@ -1,29 +1,32 @@
 """업무 개선 요청 분석 Agent (단일 Agent).
 
-절차: ① 입력 검증 → ② Claude 구조화 분석(요구사항 구조화 + 누락 정보/질문 생성)
+절차: ① 입력 검증 → ② LLM 구조화 분석(요구사항 구조화 + 누락 정보/질문 생성)
       → ③ 가드레일 검증(사실 확정 오류 교정) → ④ 보고서 생성
 F05: 추가 답변이 들어오면 원 요청 + 답변으로 ②~④를 다시 수행해 보고서를 갱신한다.
+
+분석 엔진(mode)
+- gemini : Google ADK + Gemini (무료 티어, 기본값)   — agent/adk_agent.py
+- claude : Anthropic Claude API (유료, 선택)          — 아래 _call_claude
+- demo   : 규칙 기반 기준선 (AI 미사용)               — agent/baseline.py
 """
 import os
 import time
 from dataclasses import dataclass, field
 
-import anthropic
-
+from .adk_agent import GEMINI_MODEL, call_gemini_adk, gemini_key_available
+from .errors import AnalysisError
 from .guardrails import apply_guardrails
 from .prompts import SYSTEM_PROMPT, build_user_message, source_text
 from .schema import AnalysisReport
 
-MODEL = os.getenv("ANALYZER_MODEL", "claude-opus-5-5")
-EFFORT = os.getenv("ANALYZER_EFFORT", "medium")
+CLAUDE_MODEL = os.getenv("ANALYZER_MODEL", "claude-opus-5-5")
+CLAUDE_EFFORT = os.getenv("ANALYZER_EFFORT", "medium")
 
-
-class AnalysisError(Exception):
-    """사용자에게 보여줄 수 있는 메시지를 가진 오류."""
-
-    def __init__(self, message: str, retryable: bool = True):
-        super().__init__(message)
-        self.retryable = retryable
+ENGINE_LABELS = {
+    "gemini": "Gemini (Google ADK, 무료)",
+    "claude": "Claude API (유료)",
+    "demo": "규칙 기반 데모 (AI 미사용)",
+}
 
 
 @dataclass
@@ -31,8 +34,8 @@ class AnalysisResult:
     report: AnalysisReport
     guardrail_log: list = field(default_factory=list)
     elapsed_sec: float = 0.0
-    mode: str = "claude"  # claude | demo
-    model: str = MODEL
+    mode: str = "gemini"
+    model: str = GEMINI_MODEL
     usage: dict = field(default_factory=dict)
 
 
@@ -49,24 +52,37 @@ def validate_input(task_name: str, problem: str) -> list[str]:
     return errors
 
 
+def available_engines() -> list[str]:
+    engines = []
+    if gemini_key_available():
+        engines.append("gemini")
+    if os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"):
+        engines.append("claude")
+    return engines + ["demo"]
+
+
 def has_api_key() -> bool:
-    return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
+    return available_engines() != ["demo"]
 
 
 def analyze(task_name: str, problem: str, improvement: str = "", answers: list | None = None,
-            mode: str = "claude") -> AnalysisResult:
+            mode: str = "gemini") -> AnalysisResult:
     errors = validate_input(task_name, problem)
     if errors:
         raise AnalysisError(" ".join(errors), retryable=False)
 
     start = time.perf_counter()
+    msg = build_user_message(task_name, problem, improvement, answers)
     if mode == "demo":
         from .baseline import rule_based_analyze
-        report = rule_based_analyze(task_name, problem, improvement, answers)
-        usage, model = {}, "rule-based"
+        report, usage, model = rule_based_analyze(task_name, problem, improvement, answers), {}, "rule-based"
+    elif mode == "claude":
+        (report, usage), model = _call_claude(msg), CLAUDE_MODEL
     else:
-        report, usage = _call_claude(build_user_message(task_name, problem, improvement, answers))
-        model = MODEL
+        if not gemini_key_available():
+            raise AnalysisError("GOOGLE_API_KEY 환경변수가 없습니다. Google AI Studio에서 무료 키를 발급해 설정해 주세요.",
+                                retryable=False)
+        (report, usage), model = call_gemini_adk(msg), GEMINI_MODEL
 
     report, log = apply_guardrails(report, source_text(task_name, problem, improvement, answers))
     return AnalysisResult(report=report, guardrail_log=log, elapsed_sec=round(time.perf_counter() - start, 1),
@@ -74,15 +90,17 @@ def analyze(task_name: str, problem: str, improvement: str = "", answers: list |
 
 
 def _call_claude(user_message: str) -> tuple[AnalysisReport, dict]:
+    import anthropic
+
     client = anthropic.Anthropic(max_retries=2, timeout=180)
     try:
         response = client.beta.messages.parse(
-            model=MODEL,
+            model=CLAUDE_MODEL,
             max_tokens=16000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
             output_format=AnalysisReport,
-            output_config={"effort": EFFORT},
+            output_config={"effort": CLAUDE_EFFORT},
             # 안전 분류기 거절 시 서버가 자동으로 대체 모델로 재시도
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
@@ -106,5 +124,4 @@ def _call_claude(user_message: str) -> tuple[AnalysisReport, dict]:
         raise AnalysisError("AI 응답을 보고서 형식으로 해석하지 못했습니다. 다시 시도해 주세요.")
 
     u = response.usage
-    usage = {"input_tokens": u.input_tokens, "output_tokens": u.output_tokens}
-    return response.parsed_output, usage
+    return response.parsed_output, {"input_tokens": u.input_tokens, "output_tokens": u.output_tokens}

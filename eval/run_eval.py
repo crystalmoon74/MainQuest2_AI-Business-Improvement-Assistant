@@ -1,7 +1,8 @@
 """테스트 사례(T01~T05) 일괄 실행 및 정량 지표 산출.
 
 사용법:
-  python eval/run_eval.py --mode claude   # Claude 분석 (ANTHROPIC_API_KEY 필요)
+  python eval/run_eval.py --mode gemini   # Google ADK + Gemini 무료 티어 (GOOGLE_API_KEY 필요)
+  python eval/run_eval.py --mode claude   # Claude 분석 (ANTHROPIC_API_KEY 필요, 유료)
   python eval/run_eval.py --mode demo     # 규칙 기반 기준선
 결과: eval/results/<mode>/<ID>.json, <ID>.md, summary.md
 """
@@ -42,7 +43,7 @@ def metrics(res):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["claude", "demo"], default="claude")
+    ap.add_argument("--mode", choices=["gemini", "claude", "demo"], default="gemini")
     ap.add_argument("--only", help="예: T01,T04")
     a = ap.parse_args()
 
