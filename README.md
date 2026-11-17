@@ -51,7 +51,7 @@ eval/run_eval.py        일괄 평가 스크립트
 ## 3. 실행 방법
 ### 3-1. 설치
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 > Windows의 '스마트 앱 컨트롤'이 켜져 있으면 일부 최신 패키지 DLL(jiter, numpy)이 차단될 수 있습니다.
 > requirements.txt는 차단되지 않는 jiter 버전으로 고정했고, 화면은 numpy 없이 동작하도록 만들었습니다.
@@ -78,7 +78,7 @@ export GOOGLE_API_KEY=AIza...
 
 ### 3-3. 웹앱 실행
 ```bash
-streamlit run app.py
+python -m streamlit run app.py
 ```
 브라우저에서 http://localhost:8501 → 왼쪽 **샘플 업무 사례**에서 T01~T05를 불러오거나 직접 입력 → **분석하기**.
 

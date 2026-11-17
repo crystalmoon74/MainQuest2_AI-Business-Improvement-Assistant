@@ -17,7 +17,22 @@ APP_NAME = "business_improvement_assistant"
 logging.getLogger("google_adk").setLevel(logging.CRITICAL)  # 오류는 화면 메시지로 안내
 
 
+def _windows_user_env(name: str) -> str | None:
+    """이미 열려 있던 터미널은 나중에 저장한 사용자 환경변수를 모르므로, Windows 레지스트리에서 직접 읽는다."""
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
+            return winreg.QueryValueEx(k, name)[0] or None
+    except OSError:
+        return None
+
+
 def gemini_key_available() -> bool:
+    for name in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        if not os.getenv(name) and (v := _windows_user_env(name)):
+            os.environ[name] = v.strip()
     if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
         os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
     return bool(os.getenv("GOOGLE_API_KEY"))
