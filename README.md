@@ -7,6 +7,8 @@
 > Main Quest 2 — "내 도메인에서 AI로 개선 지점 찾아서 PoC 만들기"
 
 ### 🌐 바로 써 보기: https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/
+### 🌿 v2 디자인: https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/v2/
+같은 분석 기능(무료 모델 자동 전환·가드레일·HTML 보고서)을 다른 UI로 제공합니다 — 좌측 사이드바 + 입력/보고서 2단 레이아웃, 보고서 안에서 바로 질문에 답하고 재분석.
 - API 키 없이: 왼쪽 **샘플 업무 사례** → **결과 미리보기** (미리 실행해 둔 Gemini 분석 결과)
 - 직접 분석: [Google AI Studio](https://aistudio.google.com/apikey)에서 **무료 Gemini 키** 발급 → 왼쪽 설정에 입력 → **분석 시작**
 - 결과는 **STEP 1~7 슬라이드**(단계별 보기 / 전체 보기)로 보여 주고, **HTML 보고서**로 내려받을 수 있습니다.
@@ -67,6 +69,8 @@ agent/report.py         Markdown 보고서 (평가 결과 저장용)
 samples/test_cases.json PRD 테스트 사례 T01~T05
 eval/run_eval.py        일괄 평가 스크립트
 web/                    GitHub Pages 웹 버전 (index.html, app.js, report.js, report.css, 자동 생성 config.js·data/)
+web/core.js             웹 공용 분석 로직 (Gemini 호출·모델 자동 전환·가드레일) — 기본/v2가 함께 사용
+web/v2/                 v2 디자인 사이트 (같은 core.js·data 사용, 화면과 보고서 디자인만 다름)
 scripts/export_web_config.py  Python 프롬프트·스키마·평가 결과 → web/ 내보내기
 .github/workflows/pages.yml   web/ 변경 시 GitHub Pages 자동 배포
 ```
@@ -146,6 +150,9 @@ python scripts/export_web_config.py
 
 **④ STEP 5 · 개선 방향** — AS-IS ↔ TO-BE 비교, 유형별 개선 후보 카드
 ![TO-BE와 개선 후보](docs/images/04_step_tobe.jpg)
+
+**⑤ v2 디자인** — 사이드바 + 요청 작성(01) / 분석 보고서(02) 2단 구성, 섹션 목차·입력 근거 「」·[검토 후보]/[비개발 대안] 라벨
+![v2 화면](docs/images/05_v2.jpg)
 
 **Gemini 평가 요약 (T01~T05)** — 자세한 내용은 [개선 효과 검증](docs/03_개선효과검증.md)
 | 지표 | 결과 |

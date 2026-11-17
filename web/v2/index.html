@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>업무 개선 분석 Assistant · v2</title>
+  <meta name="description" content="업무 개선 요청을 AI가 구조화하고, 추가 확인 질문과 분석 보고서 초안을 생성합니다.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='26' fill='%23173e35'/><text x='50' y='66' font-size='46' text-anchor='middle' fill='%23c2d8a2' font-family='sans-serif' font-weight='800'>AI</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="report.css?v=1">
+  <link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<aside>
+  <a class="brand" href="./"><span class="logo">AI</span><span>Business Improvement<br>Assistant</span></a>
+  <div class="workspace">WORKSPACE</div>
+  <nav class="nav">
+    <a class="on" href="./"><span class="ic">◇</span>업무 개선 분석</a>
+    <a href="../"><span class="ic">↺</span>기본 버전 보기</a>
+  </nav>
+  <p class="sidebar-note">요청을 잘 정리하면,<br>개선의 절반은<br>끝난 것입니다.</p>
+  <div class="bottom">MAIN QUEST 02<small>AI 업무 개선 요청 분석 Assistant</small></div>
+</aside>
+
+<main>
+  <header class="top">
+    <span>업무 혁신 / 요청 분석</span>
+    <nav><a href="../">기본 버전</a><a href="https://github.com/crystalmoon74/MainQuest2_AI-Business-Improvement-Assistant" target="_blank" rel="noopener">GitHub ↗</a></nav>
+  </header>
+
+  <section class="intro">
+    <div class="eyebrow">STRUCTURE THE REQUEST. FIND WHAT'S MISSING.</div>
+    <h1>흩어진 업무 요청을,<br>검토할 수 있는 개선안으로.</h1>
+    <p>지금 하는 일과 불편한 점을 적어 주세요. 현재 업무와 문제를 정리하고, 다음에 확인할 질문을 함께 찾습니다.</p>
+  </section>
+
+  <div class="notice"><span>ⓘ</span><div>가상 또는 익명화된 업무 사례만 입력해 주세요.
+    <small>AI 분석은 검토용 초안입니다. 실제 업무에 적용하기 전에 담당자가 확인해야 합니다. Gemini 무료 티어는 입력이 Google 제품 개선에 활용될 수 있습니다.</small></div></div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="section-head"><div><span class="step">01</span><h2>업무 요청 작성</h2></div><span class="muted">* 필수 항목</span></div>
+      <form id="requestForm" novalidate>
+        <label for="sampleSelect">어떤 업무부터 살펴볼까요?</label>
+        <select id="sampleSelect"><option value="">직접 입력하기</option></select>
+        <label for="taskName">업무명 <b>*</b></label>
+        <input id="taskName" type="text" placeholder="예: 주간 영업 실적 보고서 작성">
+        <label for="problem">현재 업무 및 문제점 <b>*</b></label>
+        <textarea id="problem" rows="7" placeholder="누가, 어떤 도구로, 어떻게 일하고 있나요? 무엇이 번거롭거나 자주 문제가 되나요?"></textarea>
+        <label for="improvement">개선하고 싶은 내용 <span class="opt">선택</span></label>
+        <textarea id="improvement" rows="3" placeholder="예: 취합 시간을 줄이고 숫자 오류를 없애고 싶습니다."></textarea>
+
+        <details class="connect" id="connect">
+          <summary>AI 분석 연결 (Gemini 무료 키) <span class="state" id="keyState">키 미입력</span></summary>
+          <label for="apiKey" style="margin-top:14px">Gemini API 키</label>
+          <input id="apiKey" type="password" autocomplete="off" placeholder="AI Studio에서 발급한 키">
+          <label class="check"><input id="rememberKey" type="checkbox"> 이 브라우저에 기억</label>
+          <label for="model">모델</label>
+          <select id="model"></select>
+          <p class="hint"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>에서 무료로 발급할 수 있습니다.
+            키는 이 브라우저에서 Google API로만 전송되며 사이트에 저장되지 않습니다. 자동 선택은 한도 초과·혼잡 시 다음 무료 모델로 넘어갑니다.</p>
+        </details>
+
+        <button id="analyzeBtn" class="primary" type="submit"><span>AI로 업무 요청 분석하기</span><span>→</span></button>
+        <p class="form-footer">입력과 결과는 이 페이지를 닫으면 사라집니다.</p>
+        <button id="resetBtn" class="text-button" type="button">입력과 결과 초기화</button>
+      </form>
+    </section>
+
+    <section class="card result" aria-live="polite">
+      <div class="section-head"><div><span class="step">02</span><h2>분석 보고서</h2></div><span class="pill" id="statusPill">검토 대기</span></div>
+      <div id="resultBody"></div>
+    </section>
+  </div>
+
+  <footer class="bottom-bar"><span>AI Business Improvement Assistant · Main Quest 02</span><span>요청을 구조화하고, 빠진 정보를 찾습니다.</span></footer>
+</main>
+<script type="module" src="app.js?v=1"></script>
+</body>
+</html>
