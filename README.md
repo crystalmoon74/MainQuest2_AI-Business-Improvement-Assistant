@@ -6,15 +6,16 @@
 
 > Main Quest 2 — "내 도메인에서 AI로 개선 지점 찾아서 PoC 만들기"
 
-### 🌐 바로 써 보기: https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/
-### 🌿 v2 디자인: https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/v2/
-같은 분석 기능(무료 모델 자동 전환·가드레일·HTML 보고서)을 다른 UI로 제공합니다 — 좌측 사이드바 + 입력/보고서 2단 레이아웃, 보고서 안에서 바로 질문에 답하고 재분석.
-- API 키 없이: 왼쪽 **샘플 업무 사례** → **결과 미리보기** (미리 실행해 둔 Gemini 분석 결과)
-- 직접 분석: [Google AI Studio](https://aistudio.google.com/apikey)에서 **무료 Gemini 키** 발급 → 왼쪽 설정에 입력 → **분석 시작**
-- 결과는 **STEP 1~7 슬라이드**(단계별 보기 / 전체 보기)로 보여 주고, **HTML 보고서**로 내려받을 수 있습니다.
+### 🌐 바로 써 보기 (v2): https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/v2/
+- API 키 없이: **샘플 보고서 미리보기** (미리 실행해 둔 실제 Gemini 분석 결과)
+- 직접 분석: [Google AI Studio](https://aistudio.google.com/apikey)에서 **무료 Gemini 키** 발급 → **AI 분석 연결**에 입력 → **AI로 업무 요청 분석하기**
+- 보고서 안에서 추가 질문에 바로 답하고 재분석, **HTML 보고서**로 내려받기
   (키는 방문자 브라우저에서 Google API로만 전송되며 사이트에는 저장되지 않습니다)
 
-![분석 보고서 화면](docs/images/02_report.jpg)
+기본 버전(슬라이드형 디자인): https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/
+— 같은 분석 기능을 STEP 1~7 슬라이드(단계별 보기 / 전체 보기)로 보여 줍니다.
+
+![v2 화면](docs/images/05_v2.jpg)
 
 | 제출 항목 | 위치 |
 |---|---|
@@ -22,7 +23,7 @@
 | PoC 코드 + 모델 선정 근거 | [agent/](agent/), [app.py](app.py), [docs/02_모델선정근거.md](docs/02_모델선정근거.md) |
 | 사용 AI | **Google ADK + Gemini (무료 티어, 기본)** · Claude API (유료, 선택) · 규칙 기반 기준선 |
 | 개선 효과 검증 | [docs/03_개선효과검증.md](docs/03_개선효과검증.md), [eval/](eval/) |
-| 공개 데모 | https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/ |
+| 공개 데모 | **v2**: https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/v2/ (기본 버전: https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/) |
 | 실행 방법·시연 | 이 문서 |
 
 ---
@@ -137,7 +138,7 @@ python scripts/export_web_config.py
 그다음 commit·push 하면 GitHub Actions가 Pages에 자동 배포합니다. 로컬 확인은 `python -m http.server 8600 --directory web`.
 
 ## 4. 시연
-공개 데모(웹 버전)에서 T01 "구매 승인 프로세스 개선 요청"을 Gemini로 분석한 결과입니다.
+공개 데모 기본 버전(①~④)과 v2(⑤)에서 T01 "구매 승인 프로세스 개선 요청"을 Gemini로 분석한 결과입니다.
 
 **① 요청 입력** — 업무명·문제점(필수), 개선 희망(선택). 무료 모델 자동 선택, 샘플 사례 불러오기
 ![입력 화면](docs/images/01_input.jpg)
