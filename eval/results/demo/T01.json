@@ -1,0 +1,115 @@
+{
+  "input": {
+    "id": "T01",
+    "title": "구매 승인 프로세스 개선 요청",
+    "purpose": "업무 절차 및 문제점 분석",
+    "task_name": "구매 요청 승인 프로세스",
+    "problem": "구매 요청을 이메일로 접수하고 있는데, 승인 과정이 복잡하고 진행 상태를 확인하기 어렵습니다. 현재는 엑셀로 관리하고 있습니다.",
+    "improvement": "자동화하고 싶습니다."
+  },
+  "metrics": {
+    "elapsed_sec": 0.0,
+    "as_is_steps": 1,
+    "problems": 1,
+    "candidates": 1,
+    "questions": 5,
+    "status_확인": 2,
+    "status_추정": 0,
+    "status_미확인": 3,
+    "guardrail_fixes": 0,
+    "fabrication_flags": 0,
+    "check_category_coverage": "7/7",
+    "dup_questions_after_guard": 0,
+    "output_tokens": "-"
+  },
+  "guardrail_log": [],
+  "report": {
+    "task_name": "구매 요청 승인 프로세스",
+    "summary": "구매 요청을 이메일로 접수하고 있는데, 승인 과정이 복잡하고 진행 상태를 확인하기 어렵습니다.",
+    "task_purpose": {
+      "content": "(규칙 기반 분석으로는 업무 목적을 추론할 수 없음)",
+      "status": "미확인",
+      "evidence": ""
+    },
+    "as_is_description": "구매 요청을 이메일로 접수하고 있는데, 승인 과정이 복잡하고 진행 상태를 확인하기 어렵습니다. 현재는 엑셀로 관리하고 있습니다.",
+    "as_is_process": [
+      {
+        "order": 1,
+        "step": "(절차 추론 불가 — 원문 참고)",
+        "status": "미확인",
+        "evidence": ""
+      }
+    ],
+    "problems": [
+      {
+        "content": "구매 요청을 이메일로 접수하고 있는데, 승인 과정이 복잡하고 진행 상태를 확인하기 어렵습니다.",
+        "status": "확인",
+        "evidence": "구매 요청을 이메일로 접수하고 있는데, 승인 과정이 복잡하고 진행 상태를 확인하기 어렵습니다."
+      }
+    ],
+    "improvement_goals": [
+      {
+        "content": "자동화하고 싶습니다.",
+        "status": "확인",
+        "evidence": "자동화하고 싶습니다."
+      }
+    ],
+    "expected_effects": [
+      {
+        "content": "기대 효과 미기재",
+        "status": "미확인",
+        "evidence": ""
+      }
+    ],
+    "to_be_concept": "(규칙 기반 분석은 To-Be를 제안하지 않음)",
+    "candidates": [
+      {
+        "title": "업무 담당자 인터뷰 후 재분석",
+        "type": "기타",
+        "description": "키워드 매칭만으로는 개선 후보를 도출할 수 없음",
+        "related_problem": "전체",
+        "expected_effect": "-",
+        "prerequisite": "-"
+      }
+    ],
+    "confirmed_categories": [
+      "사용 중인 시스템",
+      "승인 절차"
+    ],
+    "questions": [
+      {
+        "category": "업무 처리 빈도",
+        "question": "이 업무는 한 달에 대략 몇 건(또는 몇 번) 처리하나요?",
+        "reason": "규칙 기반: 입력에서 해당 키워드를 찾지 못함"
+      },
+      {
+        "category": "평균 처리 시간",
+        "question": "한 건을 처리하는 데 평균 얼마나 걸리나요?",
+        "reason": "규칙 기반: 입력에서 해당 키워드를 찾지 못함"
+      },
+      {
+        "category": "담당자/참여 부서",
+        "question": "이 업무에 참여하는 담당자와 부서는 어디인가요?",
+        "reason": "규칙 기반: 입력에서 해당 키워드를 찾지 못함"
+      },
+      {
+        "category": "예외 처리",
+        "question": "정상 흐름에서 벗어나는 예외 상황(반려, 긴급 건 등)은 어떻게 처리하나요?",
+        "reason": "규칙 기반: 입력에서 해당 키워드를 찾지 못함"
+      },
+      {
+        "category": "기대 효과",
+        "question": "개선되면 어떤 효과(시간 절감, 오류 감소 등)를 기대하나요?",
+        "reason": "규칙 기반: 입력에서 해당 키워드를 찾지 못함"
+      }
+    ],
+    "unconfirmed": [
+      "업무 처리 빈도 정보",
+      "평균 처리 시간 정보",
+      "담당자/참여 부서 정보",
+      "예외 처리 정보",
+      "기대 효과 정보"
+    ],
+    "analysis_basis": "데모/기준선 모드: AI를 사용하지 않고 문장 분리와 키워드 매칭으로 생성한 결과입니다."
+  }
+}

@@ -1,0 +1,5 @@
+anthropic>=2.9.0
+streamlit>=1.40
+pydantic>=2.7
+# Windows '스마트 앱 컨트롤'이 최신 jiter DLL을 차단하는 환경에서는 아래 버전으로 고정
+jiter==0.13.0
