@@ -1,0 +1,186 @@
+{
+  "input": {
+    "id": "T01",
+    "title": "구매 승인 프로세스 개선 요청",
+    "purpose": "업무 절차 및 문제점 분석",
+    "task_name": "구매 요청 승인 프로세스",
+    "problem": "구매 요청을 이메일로 접수하고 있는데, 승인 과정이 복잡하고 진행 상태를 확인하기 어렵습니다. 현재는 엑셀로 관리하고 있습니다.",
+    "improvement": "자동화하고 싶습니다."
+  },
+  "metrics": {
+    "elapsed_sec": 23.2,
+    "as_is_steps": 4,
+    "problems": 3,
+    "candidates": 2,
+    "questions": 8,
+    "status_확인": 5,
+    "status_추정": 6,
+    "status_미확인": 0,
+    "guardrail_fixes": 0,
+    "fabrication_flags": 0,
+    "check_category_coverage": "7/7",
+    "dup_questions_after_guard": 0,
+    "output_tokens": 1787,
+    "model": "gemini-3-flash-preview",
+    "documents": 0,
+    "reference_findings": 0,
+    "facts_from_docs": 0
+  },
+  "guardrail_log": [],
+  "report": {
+    "task_name": "구매 요청 승인 프로세스 개선",
+    "summary": "이메일과 엑셀을 이용한 수동 구매 요청 승인 방식을 자동화하여 업무 효율을 높이고자 하는 요청입니다. 현재 승인 과정의 복잡성과 진행 상태 확인의 어려움을 해결하는 것이 핵심입니다.",
+    "task_purpose": {
+      "content": "구매 요청 승인 프로세스의 자동화를 통한 업무 가시성 확보 및 효율성 증대",
+      "status": "추정",
+      "evidence": "승인 과정이 복잡하고 진행 상태를 확인하기 어렵다는 문제를 해결하기 위해 자동화를 요청함",
+      "source_doc": ""
+    },
+    "as_is_description": "구매 요청자가 이메일로 요청을 보내면 담당자가 이를 확인하고 엑셀에 기록하며 승인 절차를 진행함. 전체적인 진행 상황을 실시간으로 파악하기 어려운 구조임.",
+    "as_is_process": [
+      {
+        "order": 1,
+        "step": "구매 요청 접수",
+        "status": "확인",
+        "evidence": "구매 요청을 이메일로 접수하고 있는데",
+        "source_doc": ""
+      },
+      {
+        "order": 2,
+        "step": "승인 절차 진행",
+        "status": "추정",
+        "evidence": "승인 과정이 복잡하고라는 표현에서 승인 단계가 존재함을 추론",
+        "source_doc": ""
+      },
+      {
+        "order": 3,
+        "step": "엑셀 기록 및 관리",
+        "status": "확인",
+        "evidence": "현재는 엑셀로 관리하고 있습니다",
+        "source_doc": ""
+      },
+      {
+        "order": 4,
+        "step": "진행 상태 확인",
+        "status": "추정",
+        "evidence": "진행 상태를 확인하기 어렵다는 점에서 수동 확인 단계가 있음을 추론",
+        "source_doc": ""
+      }
+    ],
+    "problems": [
+      {
+        "content": "승인 과정이 복잡함",
+        "status": "확인",
+        "evidence": "승인 과정이 복잡하고",
+        "source_doc": ""
+      },
+      {
+        "content": "진행 상태 확인이 어려움",
+        "status": "확인",
+        "evidence": "진행 상태를 확인하기 어렵습니다",
+        "source_doc": ""
+      },
+      {
+        "content": "수기 관리로 인한 비효율",
+        "status": "추정",
+        "evidence": "현재는 엑셀로 관리하고 있다는 점에서 데이터 누락이나 중복 입력 가능성 추론",
+        "source_doc": ""
+      }
+    ],
+    "improvement_goals": [
+      {
+        "content": "구매 승인 프로세스 자동화",
+        "status": "확인",
+        "evidence": "자동화하고 싶습니다",
+        "source_doc": ""
+      }
+    ],
+    "expected_effects": [
+      {
+        "content": "실시간 승인 진행 상태 모니터링 가능",
+        "status": "추정",
+        "evidence": "진행 상태 확인이 어렵다는 문제 해결 시 기대되는 결과",
+        "source_doc": ""
+      },
+      {
+        "content": "승인 리드타임 단축",
+        "status": "추정",
+        "evidence": "자동화 도입 시 일반적인 업무 효율 향상 결과",
+        "source_doc": ""
+      }
+    ],
+    "reference_findings": [],
+    "to_be_concept": "웹 기반의 구매 승인 시스템을 구축하여 요청부터 최종 승인까지의 전 과정을 디지털화하고, 단계별 자동 알림 및 대시보드를 통해 실시간 상태를 공유함.",
+    "candidates": [
+      {
+        "title": "전자결재 기반 구매 승인 시스템 도입",
+        "type": "시스템/자동화",
+        "description": "기존 이메일/엑셀 방식을 대체하는 전용 워크플로우 시스템 구축",
+        "related_problem": "승인 과정 복잡 및 상태 확인 불가",
+        "expected_effect": "프로세스 표준화 및 가시성 확보",
+        "prerequisite": "현재의 복잡한 승인 단계에 대한 표준화 선행 필요"
+      },
+      {
+        "title": "승인 프로세스 간소화 및 표준화",
+        "type": "프로세스 개선",
+        "description": "불필요한 승인 단계를 축소하고 전결 규정을 재정비",
+        "related_problem": "승인 과정이 복잡함",
+        "expected_effect": "의사결정 속도 향상",
+        "prerequisite": "부서별 승인 권한 및 책임 범위 명확화"
+      }
+    ],
+    "confirmed_categories": [
+      "사용 중인 시스템"
+    ],
+    "questions": [
+      {
+        "category": "승인 절차",
+        "question": "현재 구매 승인을 위해 거치는 단계는 총 몇 단계이며, 각 단계의 승인권자는 누구인가요?",
+        "reason": "시스템 설계 시 워크플로우 구성을 위해 필수적인 정보입니다."
+      },
+      {
+        "category": "업무 처리 빈도",
+        "question": "한 달 평균 발생하는 구매 요청 건수는 대략 몇 건인가요?",
+        "reason": "시스템의 규모와 도입 타당성을 판단하기 위한 기초 자료입니다."
+      },
+      {
+        "category": "담당자/참여 부서",
+        "question": "구매 요청을 주로 하는 부서와 최종 구매를 집행하는 부서는 어디인가요?",
+        "reason": "시스템 사용자 권한 정의를 위해 필요합니다."
+      },
+      {
+        "category": "예외 처리",
+        "question": "긴급 구매가 필요한 경우나 승인이 반려되었을 때의 별도 절차가 있나요?",
+        "reason": "예외 상황에 대한 시스템 로직 반영이 필요합니다."
+      },
+      {
+        "category": "평균 처리 시간",
+        "question": "현재 요청부터 최종 승인까지 평균적으로 며칠 정도 소요되나요?",
+        "reason": "개선 후 성과를 측정하기 위한 기준 지표가 됩니다."
+      },
+      {
+        "category": "기대 효과",
+        "question": "자동화를 통해 가장 우선적으로 해결하고 싶은 핵심 지표는 무엇인가요?",
+        "reason": "개발 우선순위를 결정하는 기준이 됩니다."
+      },
+      {
+        "category": "기타",
+        "question": "현재 사용하는 엑셀 양식에 포함된 주요 항목(품목, 수량, 단가 등)은 무엇인가요?",
+        "reason": "데이터베이스 설계 시 필요한 필드를 파악하기 위함입니다."
+      },
+      {
+        "category": "업무 목적",
+        "question": "구매 대상이 주로 소모품인가요, 아니면 원자재나 고정자산인가요?",
+        "reason": "구매 성격에 따라 승인 로직과 관리 항목이 달라질 수 있습니다."
+      }
+    ],
+    "unconfirmed": [
+      "구체적인 승인 단계",
+      "참여 부서 정보",
+      "월간 처리 물량",
+      "예외 처리 프로세스",
+      "기존 엑셀 관리 항목"
+    ],
+    "analysis_basis": "제공된 요청서의 내용이 매우 간략하여, 일반적인 기업의 구매 승인 업무 관행을 바탕으로 프로세스를 추정하고 필요한 질문을 구성하였습니다."
+  }
+}

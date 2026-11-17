@@ -10,13 +10,14 @@ import streamlit.components.v1 as components
 
 from agent import (ENGINE_LABELS, FREE_MODELS, AnalysisError, analyze, available_engines, to_html,
                    validate_input)
+from agent.documents import SUPPORTED, load_document, load_path
 
 st.set_page_config(page_title="업무 개선 분석 Assistant", page_icon="◆", layout="wide")
 
 SAMPLES = json.loads((Path(__file__).parent / "samples" / "test_cases.json").read_text(encoding="utf-8"))
 ss = st.session_state
 for k, v in {"task_name": "", "problem": "", "improvement": "", "result": None, "answers": [],
-             "error": None, "last_args": None}.items():
+             "error": None, "last_args": None, "sample_docs": []}.items():
     ss.setdefault(k, v)
 
 # 화면 전체를 보고서와 같은 톤(아이보리·클레이·세리프 제목)으로
@@ -40,16 +41,30 @@ def load_sample():
     s = next(x for x in SAMPLES if f"{x['id']} · {x['title']}" == ss.sample_pick)
     ss.task_name, ss.problem, ss.improvement = s["task_name"], s["problem"], s["improvement"]
     ss.result, ss.answers, ss.error = None, [], None
+    ss.sample_docs = [load_path(Path(__file__).parent / d["path"], d.get("kind")) for d in s.get("documents", [])]
+
+
+def collect_documents() -> list:
+    """업로드한 파일 + 샘플 문서를 참고 문서 목록으로. 읽기 실패는 오류로 알린다."""
+    docs = list(ss.sample_docs)
+    for f in ss.get("doc_files") or []:
+        docs.append(load_document(f.name, f.getvalue()))
+    return docs
 
 
 def run(answers):
+    try:
+        documents = collect_documents()
+    except AnalysisError as e:
+        ss.error = (str(e), False)
+        return
     args = dict(task_name=ss.task_name, problem=ss.problem, improvement=ss.improvement,
-                answers=answers or None, mode=ss.mode, gemini_model=ss.get("gemini_model"))
+                answers=answers or None, mode=ss.mode, gemini_model=ss.get("gemini_model"), documents=documents)
     ss.last_args = args
     label = ENGINE_LABELS[ss.mode] + (f" · {ss.get('gemini_model')}" if ss.mode == "gemini" else "")
     try:
         with st.status(f"AI Assistant가 요청을 분석하고 있습니다… [{label}] (보통 15~60초)", expanded=True) as status:
-            st.write("STEP 1 · 입력 검증 완료")
+            st.write("STEP 1 · 입력 검증 완료" + (f" · 참고 문서 {len(documents)}건" if documents else ""))
             st.write("STEP 2 · 요구사항 구조화 · 누락 정보 식별 · 질문 생성 중… (한도 초과·혼잡 시 다음 무료 모델로 자동 전환)")
             ss.result = analyze(**args)
             st.write("STEP 3 · 근거 검증(가드레일) 완료")
@@ -100,6 +115,11 @@ with st.form("request_form"):
                  placeholder="지금 어떻게 일하고 있는지, 무엇이 불편한지 자유롭게 적어 주세요.")
     st.text_area("개선하고 싶은 내용 (선택)", key="improvement", height=80,
                  placeholder="예: 진행 상태를 한눈에 보고 싶습니다.")
+    st.file_uploader("참고 문서 (선택) — 현재 쓰는 SOP, 정책·규정, 업무 매뉴얼", key="doc_files",
+                     type=[x.lstrip(".") for x in SUPPORTED], accept_multiple_files=True,
+                     help="문서의 절차·규정을 근거로 분석하고, 문서와 실제 업무의 차이를 찾습니다. 합계 10만 자 이하, 민감정보는 지운 뒤 사용하세요.")
+    if ss.sample_docs:
+        st.caption("📄 샘플 참고 문서가 함께 분석됩니다: " + ", ".join(d["name"] for d in ss.sample_docs))
     submitted = st.form_submit_button("분석 시작", type="primary", use_container_width=True)
 
 if submitted:

@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="report.css?v=1">
-  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="report.css?v=2">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <aside>
@@ -52,6 +52,22 @@
         <label for="improvement">개선하고 싶은 내용 <span class="opt">선택</span></label>
         <textarea id="improvement" rows="3" placeholder="예: 취합 시간을 줄이고 숫자 오류를 없애고 싶습니다."></textarea>
 
+        <label for="docInput">참고 문서 <span class="opt">선택 · SOP, 정책·규정, 업무 매뉴얼</span></label>
+        <div class="doc-drop" id="docDrop">
+          <span class="doc-ic">📎</span>
+          <div><b>현재 쓰는 SOP·규정 문서를 함께 올리면</b> 실제 절차와 규정을 근거로 더 깊이 분석합니다.
+            <small>파일을 끌어다 놓거나 <button type="button" class="link" id="docPick">파일 선택</button> · PDF, DOCX, TXT, MD · 최대 5개, 합계 10만 자</small></div>
+        </div>
+        <input type="file" id="docInput" multiple hidden>
+        <ul class="doc-list" id="docList"></ul>
+        <button type="button" class="text-button" id="docPasteToggle">+ 문서 내용을 텍스트로 붙여넣기</button>
+        <div class="doc-paste" id="docPaste" hidden>
+          <div class="doc-paste-row"><input id="pasteName" type="text" placeholder="문서 이름 (예: 구매요청 처리 SOP)"><select id="pasteKind"></select></div>
+          <textarea id="pasteText" rows="5" placeholder="문서 본문을 붙여넣으세요."></textarea>
+          <button type="button" class="secondary" id="pasteAdd">문서로 추가</button>
+        </div>
+        <p class="doc-note" id="docNote">문서는 이 브라우저에서 글자로 변환된 뒤 분석 요청과 함께 Gemini로 전송되며, 사이트에 저장되지 않습니다. 실제 사내 문서는 민감정보를 지운 뒤 사용하세요.</p>
+
         <details class="connect" id="connect">
           <summary>AI 분석 연결 (Gemini 무료 키) <span class="state" id="keyState">키 미입력</span></summary>
           <label for="apiKey" style="margin-top:14px">Gemini API 키</label>
@@ -77,6 +93,6 @@
 
   <footer class="bottom-bar"><span>AI Business Improvement Assistant · Main Quest 02</span><span>요청을 구조화하고, 빠진 정보를 찾습니다.</span></footer>
 </main>
-<script type="module" src="app.js?v=1"></script>
+<script type="module" src="app.js?v=2"></script>
 </body>
 </html>

@@ -44,7 +44,8 @@ def _facts(items) -> str:
     for f in items:
         ev = ""
         if f["evidence"]:
-            ev = (f'<div class="ev">원문 <q>{e(f["evidence"])}</q></div>' if f["status"] == "확인"
+            src = f'문서 「{e(f["source_doc"])}」 ' if f.get("source_doc") else "원문 "
+            ev = (f'<div class="ev">{src}<q>{e(f["evidence"])}</q></div>' if f["status"] == "확인"
                   else f'<div class="ev">근거: {e(f["evidence"])}</div>')
         out.append(f'<div class="fact s-{e(f["status"])}">{badge(f["status"])}<div class="content">{e(f["content"])}</div>{ev}</div>')
     return f'<div class="facts">{"".join(out)}</div>'
@@ -67,7 +68,8 @@ def build_report(result: AnalysisResult, answers: list | None = None) -> str:
     cover = (f'<header class="rpt-cover"><div class="rpt-eyebrow">업무 개선 요청 분석 보고서</div><h1>{e(r["task_name"])}</h1>'
              f'<p class="rpt-summary">{e(r["summary"])}</p><div class="rpt-meta"><span class="chip">📅 {datetime.now():%Y-%m-%d %H:%M}</span>'
              f'<span class="chip">🤖 {e(engine)}</span><span class="chip">⏱ {e(result.elapsed_sec)}초</span>'
-             f'<span class="chip">💬 추가 답변 {len(answers)}건 반영</span></div><div class="callout warn">⚠️ <span>{e(DISCLAIMER)}</span></div>'
+             + (f'<span class="chip">📄 참고 문서 {len(result.documents)}건</span>' if result.documents else "")
+             + f'<span class="chip">💬 추가 답변 {len(answers)}건 반영</span></div><div class="callout warn">⚠️ <span>{e(DISCLAIMER)}</span></div>'
              f'<div class="kpis"><div class="kpi accent"><b>{len(r["problems"])}</b><span>주요 문제점</span></div>'
              f'<div class="kpi"><b>{len(r["candidates"])}</b><span>개선 후보</span></div>'
              f'<div class="kpi"><b>{len(r["questions"])}</b><span>추가 확인 질문</span></div>'
@@ -77,7 +79,20 @@ def build_report(result: AnalysisResult, answers: list | None = None) -> str:
         f'<li><a href="#{sid}" data-step="{i}"><span class="n">{i + 1}</span>{e(short)}</a></li>' for i, (sid, short, _, _) in enumerate(STEPS)) + "</ol>"
 
     flow = "".join(f'<div class="flow-step s-{e(s["status"])}"><strong>{e(s["step"])}</strong>{badge(s["status"])}</div>' for s in r["as_is_process"])
-    steps_facts = [{"content": f'{s["order"]}. {s["step"]}', "status": s["status"], "evidence": s["evidence"]} for s in r["as_is_process"]]
+    steps_facts = [{"content": f'{s["order"]}. {s["step"]}', "status": s["status"], "evidence": s["evidence"],
+                    "source_doc": s.get("source_doc", "")} for s in r["as_is_process"]]
+    refs = r.get("reference_findings") or []
+    ref_html = ""
+    if result.documents or refs:
+        docs = "".join(f'<span class="chip">📄 {e(d["kind"])} · {e(d["name"])}</span>' for d in result.documents)
+        groups = ""
+        for t in ["요청과 차이", "규정 근거", "개선 제약", "문서 미비"]:
+            items = [x for x in refs if x["type"] == t]
+            if items:
+                groups += f"<h3>{e(t)}</h3>" + _facts([{"content": x["content"], "status": "확인" if x["evidence"] else "미확인",
+                                                       "evidence": x["evidence"], "source_doc": x["doc"]} for x in items])
+        ref_html = (f'<h3>참고 문서 검토</h3><div class="rpt-meta">{docs}</div>'
+                    + (groups or '<p class="empty">참고 문서에서 요청과 관련된 특이 사항을 찾지 못했습니다.</p>'))
     cands = "".join(
         f'<article class="cand"><div class="cand-top"><span class="cand-no">후보 {i:02d}</span>'
         f'<span class="tag t-{e(c["type"].replace(" ", "").replace("/", ""))}">{e(c["type"])}</span></div><h3>{e(c["title"])}</h3>'
@@ -99,7 +114,7 @@ def build_report(result: AnalysisResult, answers: list | None = None) -> str:
     slides = [
         _slide(0, f'<p>{e(r["summary"])}</p><h3>업무 목적</h3>{_facts([r["task_purpose"]])}'),
         _slide(1, f'{legend}<div class="flow">{flow}</div><h3>현재 업무 설명</h3><p>{e(r["as_is_description"])}</p><h3>단계별 근거</h3>{_facts(steps_facts)}'),
-        _slide(2, f'{legend}{_facts(r["problems"])}'),
+        _slide(2, f'{legend}{_facts(r["problems"])}{ref_html}'),
         _slide(3, f'<h3>개선 목적</h3>{_facts(r["improvement_goals"])}<h3>기대 효과</h3>{_facts(r["expected_effects"])}'),
         _slide(4, f'<div class="compare"><div class="pane asis"><div class="label">AS-IS · 현재</div><p>{e(r["as_is_description"])}</p></div>'
                   f'<div class="pane tobe"><div class="label">TO-BE · 개선 후 (가안)</div><p>{e(r["to_be_concept"])}</p></div></div>'

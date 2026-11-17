@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from agent import AnalysisError, analyze, to_markdown  # noqa: E402
+from agent.documents import load_path  # noqa: E402
 
 CHECK_CATS = ["업무 처리 빈도", "평균 처리 시간", "담당자/참여 부서", "사용 중인 시스템", "승인 절차", "예외 처리", "기대 효과"]
 
@@ -39,6 +40,9 @@ def metrics(res):
         "dup_questions_after_guard": dup,
         "output_tokens": res.usage.get("output_tokens", "-"),
         "model": res.model,
+        "documents": len(res.documents),
+        "reference_findings": len(r.reference_findings),
+        "facts_from_docs": sum(bool(getattr(f, "source_doc", "")) for f in facts),
     }
 
 
@@ -46,26 +50,28 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["gemini", "claude", "demo"], default="gemini")
     ap.add_argument("--only", help="예: T01,T04")
+    ap.add_argument("--out", default=None, help="결과 폴더 이름 (기본: 모드 이름)")
     ap.add_argument("--model", default=None, help="Gemini 모델 ID 또는 auto (기본: GEMINI_MODEL 환경변수, 없으면 auto)")
     a = ap.parse_args()
 
     cases = json.loads((ROOT / "samples" / "test_cases.json").read_text(encoding="utf-8"))
     if a.only:
         cases = [c for c in cases if c["id"] in a.only.split(",")]
-    out = ROOT / "eval" / "results" / a.mode
+    out = ROOT / "eval" / "results" / (a.out or a.mode)
     out.mkdir(parents=True, exist_ok=True)
 
     rows = []
     for c in cases:
         print(f"[{c['id']}] {c['title']} ...", flush=True)
         try:
-            res = analyze(c["task_name"], c["problem"], c["improvement"], mode=a.mode, gemini_model=a.model)
+            docs = [load_path(ROOT / d["path"], d.get("kind")) for d in c.get("documents", [])]
+            res = analyze(c["task_name"], c["problem"], c["improvement"], mode=a.mode, gemini_model=a.model, documents=docs)
         except AnalysisError as e:
             print("   실패:", e)
             rows.append({"id": c["id"], "title": c["title"], "error": str(e)})
             continue
         m = metrics(res)
-        (out / f"{c['id']}.json").write_text(json.dumps({"input": c, "metrics": m, "guardrail_log": res.guardrail_log,
+        (out / f"{c['id']}.json").write_text(json.dumps({"input": c, "metrics": m, "guardrail_log": res.guardrail_log, "documents": res.documents,
                                                          "report": res.report.model_dump()},
                                                         ensure_ascii=False, indent=2), encoding="utf-8")
         (out / f"{c['id']}.md").write_text(to_markdown(res), encoding="utf-8")
@@ -82,7 +88,8 @@ def main():
     rows.sort(key=lambda r: r["id"])
 
     keys = ["id", "title", "elapsed_sec", "as_is_steps", "problems", "candidates", "questions", "status_확인",
-            "status_추정", "status_미확인", "fabrication_flags", "check_category_coverage", "dup_questions_after_guard"]
+            "status_추정", "status_미확인", "fabrication_flags", "check_category_coverage", "dup_questions_after_guard",
+            "documents", "reference_findings", "facts_from_docs"]
     lines = [f"# 평가 결과 요약 ({a.mode})", "", "| " + " | ".join(keys) + " |", "|" + "---|" * len(keys)]
     for r in rows:
         if "error" in r:

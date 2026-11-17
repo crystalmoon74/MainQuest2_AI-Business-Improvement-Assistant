@@ -26,10 +26,11 @@ CandidateType = Literal["프로세스 개선", "시스템/자동화", "AI 활용
 
 class Finding(BaseModel):
     content: str = Field(description="분석 내용 (한 문장)")
-    status: Status = Field(description="확인=입력에 명시됨, 추정=AI의 추론, 미확인=정보 없음")
+    status: Status = Field(description="확인=입력·참고 문서에 명시됨, 추정=AI의 추론, 미확인=정보 없음")
     evidence: str = Field(
-        description="status가 '확인'이면 입력 원문을 그대로 인용한 구절. '추정'이면 추론 근거. '미확인'이면 빈 문자열"
+        description="status가 '확인'이면 입력 원문 또는 참고 문서 원문을 그대로 인용한 구절. '추정'이면 추론 근거. '미확인'이면 빈 문자열"
     )
+    source_doc: str = Field(default="", description="근거가 참고 문서이면 그 문서 이름, 요청 원문이거나 추론이면 빈 문자열")
 
 
 class ProcessStep(BaseModel):
@@ -37,6 +38,17 @@ class ProcessStep(BaseModel):
     step: str = Field(description="업무 단계 이름")
     status: Status
     evidence: str
+    source_doc: str = Field(default="", description="근거가 참고 문서이면 그 문서 이름, 아니면 빈 문자열")
+
+
+RefType = Literal["규정 근거", "요청과 차이", "개선 제약", "문서 미비"]
+
+
+class RefFinding(BaseModel):
+    type: RefType
+    doc: str = Field(description="참고 문서 이름")
+    content: str = Field(description="분석 내용")
+    evidence: str = Field(description="문서 원문 인용 (문서 미비는 빈 문자열 가능)")
 
 
 class Candidate(BaseModel):
@@ -63,6 +75,8 @@ class AnalysisReport(BaseModel):
     problems: List[Finding]
     improvement_goals: List[Finding]
     expected_effects: List[Finding]
+    reference_findings: List[RefFinding] = Field(
+        default_factory=list, description="참고 문서 기반 검토 결과. 참고 문서가 없으면 빈 배열")
     to_be_concept: str = Field(description="개선 후(To-Be) 모습 초안. 확정이 아닌 검토용 가안임을 전제로 서술")
     candidates: List[Candidate]
     confirmed_categories: List[QuestionCategory] = Field(

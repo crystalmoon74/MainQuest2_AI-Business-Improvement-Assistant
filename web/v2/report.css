@@ -92,3 +92,15 @@ body.r2-standalone { margin: 0; background: var(--bg); font-family: var(--sans);
 .r2-page .r2-card { background: #fff; border: 1px solid var(--line); border-radius: 13px; padding: 30px; box-shadow: 0 4px 16px rgba(28, 61, 49, .03); }
 .r2-page .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 1.7px; color: #76918a; }
 @media print { body.r2-standalone { background: #fff; } .r2-page .r2-card { border: 0; box-shadow: none; padding: 0; } .r2-toc { display: none; } .r2-sec { break-inside: avoid-page; } }
+
+/* 참고 문서 근거 */
+.docmark { display: inline-block; font-size: 9.5px; font-weight: 700; color: #48698f; background: #e9f0f8; border-radius: 4px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
+.r2-ev.doc { color: #5b7896; }
+.r2-flow li.fromdoc { border-color: #c8d9ec; background: #f5f9fd; }
+.r2-docs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.r2-doc { font-size: 11px; border: 1px solid #dbe6f3; background: #f5f9fd; color: #48698f; border-radius: 20px; padding: 3px 10px; }
+.r2-doc small { color: #8aa2bd; }
+h4.ref-h { display: flex; align-items: baseline; gap: 8px; }
+h4.ref-h span { font-weight: 400; color: var(--faint); font-size: 10.5px; }
+h4.ref-요청과차이 { color: #8b4935; }
+h4.ref-개선제약 { color: #8a6a2b; }

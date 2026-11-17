@@ -38,6 +38,7 @@ class AnalysisResult:
     model: str = GEMINI_MODEL
     usage: dict = field(default_factory=dict)
     attempts: list = field(default_factory=list)  # 모델 자동 전환 기록
+    documents: list = field(default_factory=list)  # 참고한 문서 [{"name", "kind", "chars"}]
 
 
 def validate_input(task_name: str, problem: str) -> list[str]:
@@ -67,14 +68,19 @@ def has_api_key() -> bool:
 
 
 def analyze(task_name: str, problem: str, improvement: str = "", answers: list | None = None,
-            mode: str = "gemini", gemini_model: str | None = None) -> AnalysisResult:
+            mode: str = "gemini", gemini_model: str | None = None, documents: list | None = None) -> AnalysisResult:
+    """documents: 참고 문서 목록 [{"name", "kind", "text"}] (agent/documents.py 로 읽음)"""
     errors = validate_input(task_name, problem)
     if errors:
         raise AnalysisError(" ".join(errors), retryable=False)
+    documents = [d for d in (documents or []) if d.get("text", "").strip()]
+    if documents:
+        from .documents import check_size
+        check_size(documents)
 
     start = time.perf_counter()
     attempts = []
-    msg = build_user_message(task_name, problem, improvement, answers)
+    msg = build_user_message(task_name, problem, improvement, answers, documents)
     if mode == "demo":
         from .baseline import rule_based_analyze
         report, usage, model = rule_based_analyze(task_name, problem, improvement, answers), {}, "rule-based"
@@ -86,9 +92,11 @@ def analyze(task_name: str, problem: str, improvement: str = "", answers: list |
                                 retryable=False)
         report, usage, model, attempts = _with_retry(lambda: call_gemini_adk(msg, gemini_model), waits=(10,))
 
-    report, log = apply_guardrails(report, source_text(task_name, problem, improvement, answers))
+    report, log = apply_guardrails(report, source_text(task_name, problem, improvement, answers, documents),
+                                   [d["name"] for d in documents])
     return AnalysisResult(report=report, guardrail_log=log, elapsed_sec=round(time.perf_counter() - start, 1),
-                          mode=mode, model=model, usage=usage, attempts=attempts)
+                          mode=mode, model=model, usage=usage, attempts=attempts,
+                          documents=[{"name": d["name"], "kind": d.get("kind", "기타"), "chars": len(d["text"])} for d in documents])
 
 
 def _with_retry(fn, waits=(5, 15)):

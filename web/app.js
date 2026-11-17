@@ -184,7 +184,7 @@ async function init() {
   $("showSampleResult").addEventListener("click", showSampleResult);
   try {
     const [cases, samples] = await Promise.all([fetch("data/test_cases.json").then((r) => r.json()), fetch("data/sample_results.json").then((r) => r.json()).catch(() => ({}))]);
-    state.cases = cases; state.samples = samples;
+    state.cases = cases.filter((c) => !c.documents); state.samples = samples; // 참고 문서 사례(T06)는 v2 전용
     $("sampleSelect").innerHTML = cases.map((c) => `<option value="${esc(c.id)}">${esc(c.id)} · ${esc(c.title)}</option>`).join("");
   } catch {
     $("sampleSelect").innerHTML = "<option>샘플을 불러오지 못했습니다</option>";

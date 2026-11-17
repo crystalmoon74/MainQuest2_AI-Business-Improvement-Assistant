@@ -1,6 +1,7 @@
 google-adk>=2.11.0     # Google ADK + Gemini (기본 분석 엔진, 무료 티어)
 streamlit>=1.40
 pydantic>=2.7
+pypdf>=5.0             # 참고 문서(PDF) 텍스트 추출
 anthropic>=2.9.0       # 선택: Claude API 엔진 (유료)
 # Windows '스마트 앱 컨트롤'이 최신 jiter DLL을 차단하는 환경에서는 아래 버전으로 고정
 jiter==0.13.0

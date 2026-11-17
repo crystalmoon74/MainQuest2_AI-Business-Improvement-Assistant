@@ -47,11 +47,23 @@ def main():
         f"export const REPORT_SCHEMA = {json.dumps(schema, ensure_ascii=False, indent=1)};\n",
         encoding="utf-8")
     shutil.copy(ROOT / "samples" / "test_cases.json", WEB / "data" / "test_cases.json")
+    # 샘플 참고 문서(가상 SOP·규정) — v2 화면에서 T06 선택 시 불러온다
+    (WEB / "data" / "docs").mkdir(exist_ok=True)
+    for f in (ROOT / "samples" / "docs").glob("*.md"):
+        shutil.copy(f, WEB / "data" / "docs" / f.name)
 
+    # 미리보기용 결과: 기본 평가(gemini) + 참고 문서 비교 평가(gemini_docs)의 T06
+    files = sorted((ROOT / "eval" / "results" / "gemini").glob("T*.json"))
+    files += sorted((ROOT / "eval" / "results" / "gemini_docs").glob("T06.json"))
     results = {}
-    for f in sorted((ROOT / "eval" / "results" / "gemini").glob("T*.json")):
+    for f in files:
         d = json.loads(f.read_text(encoding="utf-8"))
-        results[d["input"]["id"]] = {"metrics": d["metrics"], "guardrail_log": d["guardrail_log"], "report": d["report"]}
+        docs = d.get("documents") or [
+            {"name": Path(x["path"]).name, "kind": x.get("kind", "기타"),
+             "chars": len((ROOT / x["path"]).read_text(encoding="utf-8").strip())}
+            for x in d["input"].get("documents", [])]
+        results[d["input"]["id"]] = {"metrics": d["metrics"], "guardrail_log": d["guardrail_log"], "report": d["report"],
+                                     "documents": docs}
     (WEB / "data" / "sample_results.json").write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"web/config.js, web/data/test_cases.json, web/data/sample_results.json ({len(results)}건) 생성")
 

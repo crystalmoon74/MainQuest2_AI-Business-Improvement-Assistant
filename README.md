@@ -9,6 +9,7 @@
 ### 🌐 바로 써 보기 (v2): https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/v2/
 - API 키 없이: **샘플 보고서 미리보기** (미리 실행해 둔 실제 Gemini 분석 결과)
 - 직접 분석: [Google AI Studio](https://aistudio.google.com/apikey)에서 **무료 Gemini 키** 발급 → **AI 분석 연결**에 입력 → **AI로 업무 요청 분석하기**
+- **참고 문서 추가**: 현재 쓰는 SOP·정책·규정·업무 매뉴얼(PDF, DOCX, TXT, MD)을 올리면 문서의 절차·규정을 근거로 분석하고, 문서와 실제 업무의 차이를 찾아냅니다. 샘플 'T06'을 고르면 가상 SOP·전결 규정이 함께 들어갑니다.
 - 보고서 안에서 추가 질문에 바로 답하고 재분석, **HTML 보고서**로 내려받기
   (키는 방문자 브라우저에서 Google API로만 전송되며 사이트에는 저장되지 않습니다)
 
@@ -37,6 +38,7 @@
 | F04 | 분석 보고서 표시 | 표지(요약·핵심 지표) + **STEP 1~7 슬라이드**(업무 개요 → AS-IS 흐름 → 문제점 → 목적·효과 → TO-BE·개선 후보 → 추가 질문 → 근거·검증). 모든 사실에 확인/추정/미확인 배지와 원문 근거 표시 |
 | F05 | 추가 답변 반영 | 질문에 답하면 원 요청+답변으로 재분석해 보고서 갱신 |
 | F06 | 보고서 다운로드 | 슬라이드형 **HTML 보고서** 다운로드 (CSS 내장, 단계 목차, 인쇄 시 단계별 페이지 나눔) |
+| F07 | 참고 문서 반영 | SOP·정책·매뉴얼(PDF/DOCX/TXT/MD, 최대 5개·10만 자)을 근거로 분석. '참고 문서 검토' 섹션(요청과 차이·규정 근거·개선 제약·문서 미비), 문서 인용 출처 표시, 문서 인용도 가드레일로 검증 (v2 웹, Streamlit) |
 | 안정성 | 무료 모델 자동 전환 | 한도 초과(429)·혼잡(503)·사용 불가(404)면 다음 무료 Gemini 모델로 자동 전환 |
 | 신뢰성 | 가드레일 | '확인'인데 원문에 인용 근거가 없으면 자동으로 '추정'으로 강등하고 교정 내역 표시 |
 
@@ -65,11 +67,14 @@ agent/analyzer.py       Agent 절차(검증→분석→가드레일), 엔진 선
 agent/adk_agent.py      Google ADK LlmAgent + Gemini 호출 (기본 엔진)
 agent/guardrails.py     사실 확정 오류 자동 교정
 agent/baseline.py       규칙 기반 비교 기준선 / 데모 모드
+agent/documents.py      참고 문서 텍스트 추출 (PDF·DOCX·TXT·MD)
 agent/html_report.py    슬라이드형 HTML 보고서 (web/report.css 공용)
 agent/report.py         Markdown 보고서 (평가 결과 저장용)
 samples/test_cases.json PRD 테스트 사례 T01~T05
 eval/run_eval.py        일괄 평가 스크립트
 web/                    GitHub Pages 웹 버전 (index.html, app.js, report.js, report.css, 자동 생성 config.js·data/)
+web/docs.js             브라우저 참고 문서 텍스트 추출 (pdf.js·JSZip, 서버 전송 없음)
+samples/docs/           시연용 가상 SOP·전결 규정
 web/core.js             웹 공용 분석 로직 (Gemini 호출·모델 자동 전환·가드레일) — 기본/v2가 함께 사용
 web/v2/                 v2 디자인 사이트 (같은 core.js·data 사용, 화면과 보고서 디자인만 다름)
 scripts/export_web_config.py  Python 프롬프트·스키마·평가 결과 → web/ 내보내기
@@ -154,6 +159,12 @@ python scripts/export_web_config.py
 
 **⑤ v2 디자인** — 사이드바 + 요청 작성(01) / 분석 보고서(02) 2단 구성, 섹션 목차·입력 근거 「」·[검토 후보]/[비개발 대안] 라벨
 ![v2 화면](docs/images/05_v2.jpg)
+
+**⑥ 참고 문서 추가 (v2)** — SOP·규정 파일을 끌어다 놓거나 텍스트로 붙여넣기, 문서 종류 지정
+![참고 문서 추가](docs/images/06_v2_documents.jpg)
+
+**⑦ 참고 문서 검토 섹션** — 요청과 차이 · 규정 근거 · 개선 제약을 문서 인용과 함께 정리
+![참고 문서 검토](docs/images/07_v2_doc_review.jpg)
 
 **Gemini 평가 요약 (T01~T05)** — 자세한 내용은 [개선 효과 검증](docs/03_개선효과검증.md)
 | 지표 | 결과 |

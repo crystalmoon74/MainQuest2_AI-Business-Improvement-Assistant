@@ -38,7 +38,11 @@ export function validateInput(taskName, problem) {
   return errors;
 }
 
-export function buildUserMessage({ taskName, problem, improvement, answers }) {
+export const MAX_DOC_CHARS = 100000; // agent/prompts.py MAX_DOC_CHARS 와 동일
+export const DOC_KINDS = ["SOP", "정책/규정", "업무 매뉴얼", "기타"];
+
+// documents: [{ name, kind, text }] — agent/prompts.py build_user_message 와 같은 형식
+export function buildUserMessage({ taskName, problem, improvement, answers, documents }) {
   const parts = ["다음 업무 개선 요청을 분석해 주세요.", "", "<request>",
     `[업무명]\n${taskName.trim()}`, "", `[현재 업무 및 문제점]\n${problem.trim()}`, "",
     `[개선하고 싶은 내용]\n${improvement.trim() || "(입력 없음)"}`];
@@ -135,13 +139,20 @@ function similarity(a, b) { // 2*LCS/(|a|+|b|) — Python SequenceMatcher.ratio(
   return (2 * dp[b.length]) / (a.length + b.length);
 }
 
-export function applyGuardrails(r, source) {
+// docNames: 제출된 참고 문서 이름 목록 (agent/guardrails.py 와 같은 규칙)
+export function applyGuardrails(r, source, docNames = []) {
   const log = [];
+  const names = new Set(docNames);
   const check = (item, where) => {
-    if (item?.status === "확인" && !evidenceInSource(item.evidence, source)) {
+    if (!item) return;
+    if (item.status === "확인" && !evidenceInSource(item.evidence, source)) {
       log.push({ type: "근거 불일치 → 추정으로 강등", where, content: item.content || item.step || "", evidence: item.evidence });
       item.status = "추정";
       item.evidence = `(원문에서 인용 확인 불가) ${item.evidence || ""}`.trim();
+    }
+    if (item.source_doc && !names.has(item.source_doc)) {
+      log.push({ type: "제출되지 않은 문서명 → 출처 제거", where, content: item.source_doc });
+      item.source_doc = "";
     }
   };
   check(r.task_purpose, "업무 목적");
@@ -149,10 +160,20 @@ export function applyGuardrails(r, source) {
   [["주요 문제점", r.problems], ["개선 목적", r.improvement_goals], ["기대 효과", r.expected_effects]]
     .forEach(([name, items]) => (items || []).forEach((f, i) => check(f, `${name} ${i + 1}`)));
 
+  r.reference_findings = (r.reference_findings || []).filter((rf, i) => {
+    if (!names.has(rf.doc)) { log.push({ type: "제출되지 않은 문서 인용 → 제거", where: `참고 문서 검토 ${i + 1}`, content: rf.content }); return false; }
+    if (rf.evidence && !evidenceInSource(rf.evidence, source)) {
+      log.push({ type: "문서 인용 불일치 → 인용 표시 제거", where: `참고 문서 검토 ${i + 1}`, content: rf.content, evidence: rf.evidence });
+      rf.evidence = ""; rf.content = `(문서 원문 확인 필요) ${rf.content}`;
+    }
+    return true;
+  });
+
   const confirmed = new Set(r.confirmed_categories || []);
   let kept = [];
   for (const q of r.questions || []) {
-    if (confirmed.has(q.category) && q.category !== "기타") { log.push({ type: "이미 확인된 범주 질문 제거", where: q.category, content: q.question }); continue; }
+    // 참고 문서와 실제 업무의 차이를 묻는 질문은 범주가 확인됐어도 남긴다 (agent/guardrails.py 와 동일)
+    if (confirmed.has(q.category) && q.category !== "기타" && !(names.size && /SOP|규정|문서|정책|매뉴얼|지침/.test(q.question))) { log.push({ type: "이미 확인된 범주 질문 제거", where: q.category, content: q.question }); continue; }
     if (kept.some((k) => similarity(norm(q.question), norm(k.question)) > 0.8)) { log.push({ type: "중복 질문 제거", where: q.category, content: q.question }); continue; }
     kept.push(q);
   }
