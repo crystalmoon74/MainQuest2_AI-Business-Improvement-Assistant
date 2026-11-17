@@ -38,6 +38,7 @@ def metrics(res):
         "check_category_coverage": f"{covered}/7",
         "dup_questions_after_guard": dup,
         "output_tokens": res.usage.get("output_tokens", "-"),
+        "model": res.model,
     }
 
 
@@ -45,6 +46,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["gemini", "claude", "demo"], default="gemini")
     ap.add_argument("--only", help="예: T01,T04")
+    ap.add_argument("--model", default=None, help="Gemini 모델 ID 또는 auto (기본: GEMINI_MODEL 환경변수, 없으면 auto)")
     a = ap.parse_args()
 
     cases = json.loads((ROOT / "samples" / "test_cases.json").read_text(encoding="utf-8"))
@@ -57,7 +59,7 @@ def main():
     for c in cases:
         print(f"[{c['id']}] {c['title']} ...", flush=True)
         try:
-            res = analyze(c["task_name"], c["problem"], c["improvement"], mode=a.mode)
+            res = analyze(c["task_name"], c["problem"], c["improvement"], mode=a.mode, gemini_model=a.model)
         except AnalysisError as e:
             print("   실패:", e)
             rows.append({"id": c["id"], "title": c["title"], "error": str(e)})

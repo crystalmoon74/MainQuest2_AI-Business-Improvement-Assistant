@@ -1,16 +1,17 @@
-"""AI 업무 개선 요청 분석 Assistant — Streamlit 웹앱.
+"""AI 업무 개선 요청 분석 Assistant — Streamlit 웹앱 (Python + Google ADK 버전).
 
-실행: streamlit run app.py
+실행: python -m streamlit run app.py
 """
 import json
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
-from agent import ENGINE_LABELS, AnalysisError, analyze, available_engines, to_markdown, validate_input
-from agent.report import BADGE, DISCLAIMER, _esc
+from agent import (ENGINE_LABELS, FREE_MODELS, AnalysisError, analyze, available_engines, to_html,
+                   validate_input)
 
-st.set_page_config(page_title="AI 업무 개선 요청 분석 Assistant", page_icon="🧭", layout="wide")
+st.set_page_config(page_title="업무 개선 분석 Assistant", page_icon="◆", layout="wide")
 
 SAMPLES = json.loads((Path(__file__).parent / "samples" / "test_cases.json").read_text(encoding="utf-8"))
 ss = st.session_state
@@ -18,24 +19,42 @@ for k, v in {"task_name": "", "problem": "", "improvement": "", "result": None, 
              "error": None, "last_args": None}.items():
     ss.setdefault(k, v)
 
+# 화면 전체를 보고서와 같은 톤(아이보리·클레이·세리프 제목)으로
+st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@600&display=swap" rel="stylesheet">
+<style>
+  html, body, [class*="css"], .stMarkdown, .stTextInput, .stTextArea { font-family: "Noto Sans KR", system-ui, sans-serif; }
+  h1, h2, h3 { font-family: "Noto Serif KR", Georgia, serif !important; font-weight: 600 !important; letter-spacing: -.01em; }
+  .eyebrow { color: #b35a3c; font-weight: 700; letter-spacing: .12em; font-size: .78rem; text-transform: uppercase; }
+  .eyebrow::before { content: "◆ "; color: #d97757; }
+  .lead { color: #3d3d3a; font-size: 1.02rem; max-width: 64ch; }
+  .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 12px 0 8px; }
+  .how div { background: #fff; border: 1px solid #e8e6dc; border-radius: 14px; padding: 12px 16px; }
+  .how b { font-family: "Noto Serif KR", serif; color: #d97757; margin-right: 8px; font-size: 1.2rem; }
+  .how span { color: #73726c; font-size: .85rem; display: block; }
+  div[data-testid="stForm"] { background: #fff; border: 1px solid #e8e6dc; border-radius: 18px; padding: 8px 18px 18px; }
+</style>""", unsafe_allow_html=True)
+
 
 def load_sample():
-    s = next(x for x in SAMPLES if f"{x['id']} {x['title']}" == ss.sample_pick)
+    s = next(x for x in SAMPLES if f"{x['id']} · {x['title']}" == ss.sample_pick)
     ss.task_name, ss.problem, ss.improvement = s["task_name"], s["problem"], s["improvement"]
     ss.result, ss.answers, ss.error = None, [], None
 
 
 def run(answers):
     args = dict(task_name=ss.task_name, problem=ss.problem, improvement=ss.improvement,
-                answers=answers or None, mode=ss.mode)
+                answers=answers or None, mode=ss.mode, gemini_model=ss.get("gemini_model"))
     ss.last_args = args
+    label = ENGINE_LABELS[ss.mode] + (f" · {ss.get('gemini_model')}" if ss.mode == "gemini" else "")
     try:
-        with st.status(f"AI Assistant가 요청을 분석하고 있습니다… [{ENGINE_LABELS[ss.mode]}] (보통 10~60초)", expanded=True) as status:
-            st.write("① 입력 검증 완료")
-            st.write("② 요구사항 구조화 · 누락 정보 식별 · 질문 생성 중…")
+        with st.status(f"AI Assistant가 요청을 분석하고 있습니다… [{label}] (보통 15~60초)", expanded=True) as status:
+            st.write("STEP 1 · 입력 검증 완료")
+            st.write("STEP 2 · 요구사항 구조화 · 누락 정보 식별 · 질문 생성 중… (한도 초과·혼잡 시 다음 무료 모델로 자동 전환)")
             ss.result = analyze(**args)
-            st.write("③ 근거 검증(가드레일) 완료")
-            status.update(label=f"분석 완료 ({ss.result.elapsed_sec}초)", state="complete", expanded=False)
+            st.write("STEP 3 · 근거 검증(가드레일) 완료")
+            st.write("STEP 4 · 보고서 생성 완료")
+            status.update(label=f"분석 완료 · {ss.result.model} · {ss.result.elapsed_sec}초", state="complete", expanded=False)
         ss.answers, ss.error = answers or [], None
     except AnalysisError as e:
         ss.error = (str(e), e.retryable)
@@ -43,19 +62,9 @@ def run(answers):
         ss.error = (f"예상하지 못한 오류가 발생했습니다: {e}", True)
 
 
-def table(rows):
-    """numpy/pandas 없이 표 렌더링 (일부 Windows 환경의 DLL 차단 회피)."""
-    if not rows:
-        return
-    cols = list(rows[0].keys())
-    md = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
-    md += ["| " + " | ".join(_esc(str(r.get(c, "")) or "-") for c in cols) + " |" for r in rows]
-    st.markdown("\n".join(md))
-
-
 # ---------------- Sidebar ----------------
 with st.sidebar:
-    st.header("⚙️ 설정")
+    st.header("설정")
     engines = available_engines()
     if "gemini" in engines:
         st.success("Google API 키 감지됨 — Gemini(무료) 분석 사용 가능")
@@ -63,9 +72,12 @@ with st.sidebar:
         st.warning("GOOGLE_API_KEY 환경변수가 없습니다. Google AI Studio에서 무료 키를 발급해 설정하세요. "
                    "지금은 규칙 기반 데모 모드로만 동작합니다.")
     ss.mode = st.radio("분석 엔진", engines, format_func=lambda m: ENGINE_LABELS[m])
+    if ss.mode == "gemini":
+        st.selectbox("Gemini 모델", ["auto", *FREE_MODELS], key="gemini_model",
+                     format_func=lambda m: "자동 선택 (권장) — 실패 시 다음 모델로 전환" if m == "auto" else FREE_MODELS[m])
     st.divider()
-    st.subheader("📂 샘플 업무 사례")
-    st.selectbox("테스트 사례 선택", [f"{s['id']} {s['title']}" for s in SAMPLES], key="sample_pick")
+    st.subheader("샘플 업무 사례")
+    st.selectbox("테스트 사례 선택", [f"{s['id']} · {s['title']}" for s in SAMPLES], key="sample_pick")
     st.button("샘플 불러오기", on_click=load_sample, use_container_width=True)
     st.divider()
     st.caption("🔒 가상·익명화된 업무 사례만 입력하세요. 실제 기밀정보·개인정보는 입력하지 마세요. "
@@ -73,16 +85,22 @@ with st.sidebar:
                "Gemini 무료 티어는 입력이 Google 제품 개선에 활용될 수 있습니다.")
 
 # ---------------- Main: 입력 (F01) ----------------
-st.title("🧭 AI 업무 개선 요청 분석 Assistant")
-st.caption("업무 문제를 편하게 적어 주세요. AI가 요구사항을 정리하고, 추가로 확인할 질문과 분석 보고서 초안을 만들어 드립니다.")
+st.markdown('<div class="eyebrow">AI Business Improvement Assistant</div>', unsafe_allow_html=True)
+st.title("업무 개선 요청을 검토 가능한 보고서로")
+st.markdown('<p class="lead">현업의 업무 개선 요청을 자유롭게 적으면, AI가 현재 업무와 문제점을 구조화하고 빠진 정보를 질문으로 '
+            '정리해 IT 담당자·BA가 바로 검토할 수 있는 분석 보고서 초안을 만듭니다.</p>'
+            '<div class="how"><div><b>1</b>요청 입력<span>업무명과 불편한 점을 자유롭게</span></div>'
+            '<div><b>2</b>AI 분석<span>확인·추정·미확인을 구분해 구조화</span></div>'
+            '<div><b>3</b>보고서 검토<span>질문에 답하면 보고서가 갱신</span></div></div>', unsafe_allow_html=True)
 
 with st.form("request_form"):
+    st.markdown("#### STEP 0 · 업무 개선 요청")
     st.text_input("업무명 *", key="task_name", placeholder="예: 구매 요청 승인 프로세스")
-    st.text_area("현재 업무 및 문제점 설명 *", key="problem", height=150,
+    st.text_area("현재 업무 및 문제점 *", key="problem", height=150,
                  placeholder="지금 어떻게 일하고 있는지, 무엇이 불편한지 자유롭게 적어 주세요.")
     st.text_area("개선하고 싶은 내용 (선택)", key="improvement", height=80,
                  placeholder="예: 진행 상태를 한눈에 보고 싶습니다.")
-    submitted = st.form_submit_button("🔍 분석하기", type="primary", use_container_width=True)
+    submitted = st.form_submit_button("분석 시작", type="primary", use_container_width=True)
 
 if submitted:
     errs = validate_input(ss.task_name, ss.problem)
@@ -95,7 +113,7 @@ if submitted:
 if ss.error:
     msg, retryable = ss.error
     st.error(f"분석에 실패했습니다. {msg}")
-    if retryable and ss.last_args and st.button("🔁 다시 시도"):
+    if retryable and ss.last_args and st.button("다시 시도"):
         run(ss.last_args.get("answers") or [])
         st.rerun()
 
@@ -104,67 +122,31 @@ res = ss.result
 if res:
     r = res.report
     st.divider()
-    st.subheader(f"📄 분석 보고서 — {r.task_name}")
     if res.mode == "demo":
         st.info("현재 결과는 **규칙 기반 데모 모드**(AI 미사용)입니다. AI 분석과 비교하기 위한 기준선입니다.")
-    st.markdown(DISCLAIMER)
+    if len(res.attempts) > 1:
+        tried = ", ".join(f"{a['model']}({a['result'][:20]})" for a in res.attempts[:-1])
+        st.info(f"🔁 {tried} → **{res.model}**로 자동 전환해 분석했습니다.")
 
-    c = st.columns(5)
-    c[0].metric("분석 시간", f"{res.elapsed_sec}초")
-    c[1].metric("주요 문제점", len(r.problems))
-    c[2].metric("개선 후보", len(r.candidates))
-    c[3].metric("추가 질문", len(r.questions))
-    c[4].metric("자동 교정", len(res.guardrail_log), help="원문에 근거가 없는 '확인' 항목을 '추정'으로 강등한 건수 등")
+    html = to_html(res, ss.answers)
+    c1, c2 = st.columns([3, 1])
+    c1.markdown(f"### 분석 보고서 — {r.task_name}")
+    c2.download_button("⬇ HTML 보고서 다운로드", html, file_name=f"분석보고서_{r.task_name}.html",
+                       mime="text/html", type="primary", use_container_width=True)
 
-    tab_report, tab_q, tab_md, tab_raw = st.tabs(["📋 보고서", "❓ 추가 질문 답변", "⬇️ 다운로드", "🧩 원본 데이터"])
-
+    tab_report, tab_q, tab_raw = st.tabs(["📋 보고서 (STEP 1~7)", "❓ 추가 질문 답변", "🧩 원본 데이터"])
     with tab_report:
-        st.markdown("#### 1. 업무 개요")
-        st.write(r.summary)
-        st.markdown(f"**업무 목적**: {BADGE[r.task_purpose.status]} {r.task_purpose.content}")
-
-        st.markdown("#### 2. 현재 업무 방식 (AS-IS)")
-        st.write(r.as_is_description)
-        st.markdown("  →  ".join(f"**{s.step}** {BADGE[s.status].split()[0]}" for s in r.as_is_process))
-        table([{"순서": s.order, "업무 단계": s.step, "상태": BADGE[s.status], "근거": s.evidence}
-               for s in r.as_is_process])
-
-        def show(items):
-            table([{"상태": BADGE[f.status], "내용": f.content, "근거": f.evidence} for f in items])
-
-        st.markdown("#### 3. 주요 문제점")
-        show(r.problems)
-        st.markdown("#### 4. 개선 목적 및 기대 효과")
-        show(r.improvement_goals)
-        show(r.expected_effects)
-        st.markdown("#### 5. 개선 후 모습 (TO-BE, 검토용 가안)")
-        st.write(r.to_be_concept)
-        st.markdown("#### 6. 개선 후보 (검토 후보)")
-        for i, cand in enumerate(r.candidates, 1):
-            with st.expander(f"후보 {i}. {cand.title}  ·  {cand.type}", expanded=i == 1):
-                st.write(cand.description)
-                st.markdown(f"- **해결 대상 문제**: {cand.related_problem}\n- **기대 효과**: {cand.expected_effect}"
-                            f"\n- **검토 전 전제 조건**: {cand.prerequisite}")
-        st.markdown("#### 7. 추가 확인 질문")
-        for i, q in enumerate(r.questions, 1):
-            st.markdown(f"{i}. `{q.category}` {q.question}  \n   <small>└ {q.reason}</small>", unsafe_allow_html=True)
-        st.markdown("#### 8. 분석 근거 및 미확인 사항")
-        st.write(r.analysis_basis)
-        for u in r.unconfirmed:
-            st.markdown(f"- ⚪ {u}")
-        if res.guardrail_log:
-            with st.expander(f"🛡️ 자동 검증(가드레일) 교정 내역 {len(res.guardrail_log)}건"):
-                table(res.guardrail_log)
+        components.html(html, height=1500, scrolling=True)
 
     with tab_q:  # F05
         if not r.questions:
             st.write("추가 질문이 없습니다.")
         else:
-            st.write("알고 있는 항목만 답해 주세요. 답변을 반영해 보고서를 다시 분석합니다.")
+            st.write("알고 있는 항목만 답해 주세요. 답변을 원문에 더해 보고서를 다시 분석합니다.")
             with st.form("answer_form"):
-                inputs = [(q, st.text_input(f"{i}. [{q.category}] {q.question}", key=f"ans_{i}_{len(ss.answers)}"))
+                inputs = [(q, st.text_input(f"Q{i}. [{q.category}] {q.question}", key=f"ans_{i}_{len(ss.answers)}"))
                           for i, q in enumerate(r.questions, 1)]
-                again = st.form_submit_button("🔄 답변 반영하여 보고서 갱신", type="primary")
+                again = st.form_submit_button("답변 반영하여 보고서 갱신", type="primary")
             if again:
                 new = [{"question": q.question, "answer": a} for q, a in inputs if a.strip()]
                 if not new:
@@ -177,12 +159,6 @@ if res:
             for a in ss.answers:
                 st.markdown(f"- Q. {a['question']}  \n  A. {a['answer']}")
 
-    with tab_md:  # F06
-        md = to_markdown(res, ss.answers)
-        st.download_button("⬇️ Markdown 보고서 다운로드", md, file_name=f"분석보고서_{r.task_name}.md",
-                           mime="text/markdown", type="primary")
-        st.code(md, language="markdown")
-
     with tab_raw:
         st.json(r.model_dump())
-        st.caption(f"모델: {res.model} · 토큰: {res.usage}")
+        st.caption(f"모델: {res.model} · 토큰: {res.usage} · 시도: {res.attempts}")

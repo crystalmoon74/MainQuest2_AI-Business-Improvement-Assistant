@@ -1,23 +1,32 @@
 // AI 업무 개선 요청 분석 Assistant — 브라우저 버전 (GitHub Pages)
 // Python(Google ADK) 버전과 같은 프롬프트·스키마(config.js, 자동 생성)·가드레일 규칙을 사용한다.
 // 방문자가 입력한 Gemini API 키로 브라우저에서 Google API를 직접 호출한다.
-import { SYSTEM_PROMPT, REPORT_SCHEMA } from "./config.js";
+import { SYSTEM_PROMPT, REPORT_SCHEMA } from "./config.js?v=2";
+import { buildReport, standaloneHTML, esc, STEPS } from "./report.js?v=2";
 
 const $ = (id) => document.getElementById(id);
-const BADGE = { "확인": "✅ 확인", "추정": "🟡 추정", "미확인": "⚪ 미확인" };
-const DISCLAIMER = "⚠️ 본 보고서는 AI가 생성한 검토용 초안입니다. 개선 후보는 최종 결정이 아니며, IT 담당자/BA의 검토가 필요합니다. '추정'·'미확인' 항목은 반드시 현업에 확인하세요.";
 const MAX_QUESTIONS = 10;
 const KEY_STORE = "mq2_gemini_key";
+const VIEW_STORE = "mq2_view";
 
-const state = { cases: [], samples: {}, result: null, answers: [], lastArgs: null, busy: false };
+// 무료 티어 텍스트 모델 (2026-11 Google AI Studio 가격표 기준). auto는 AUTO_CHAIN 순서로 시도한다.
+const MODELS = [
+  ["auto", "자동 선택 (권장) — 실패 시 다음 모델로 전환"],
+  ["gemini-3.8-flash", "Gemini 3.8 Flash — 최신"],
+  ["gemini-3.6-flash", "Gemini 3.6 Flash"],
+  ["gemini-3-flash-preview", "Gemini 3 Flash Preview"],
+  ["gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite — 빠름"],
+  ["gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite — 빠름"],
+  ["gemini-4-hydrogen", "Gemini 4 Hydrogen — 고품질·느림(1분+)"],
+];
+const AUTO_CHAIN = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"];
+
+const state = { cases: [], samples: {}, result: null, answers: [], lastArgs: null, busy: false, view: "paged", step: 0, css: null };
 
 class AnalysisError extends Error {
-  constructor(message, retryable = true) { super(message); this.retryable = retryable; }
+  constructor(message, retryable = true, switchModel = retryable) { super(message); this.retryable = retryable; this.switchModel = switchModel; }
 }
 
-// ---------- 유틸 ----------
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const badge = (st) => `<span class="badge b-${esc(st)}">${esc(BADGE[st] || st)}</span>`;
 const storage = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 저장 불가 환경 무시 */ } },
@@ -48,6 +57,7 @@ function buildUserMessage({ taskName, problem, improvement, answers }) {
 const sourceText = ({ taskName, problem, improvement, answers }) =>
   [taskName, problem, improvement, ...(answers || []).map((a) => a.answer)].join("\n");
 
+
 // ---------- Gemini 호출 (F02, F03) ----------
 async function callGemini(apiKey, model, userMessage) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -60,38 +70,49 @@ async function callGemini(apiKey, model, userMessage) {
   try {
     res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify(body) });
   } catch {
-    throw new AnalysisError("AI 서비스에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.");
+    throw new AnalysisError("AI 서비스에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.", true, false);
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = JSON.stringify(data);
     if (/API_KEY_INVALID|API key not valid|PERMISSION_DENIED/.test(msg) || res.status === 401 || res.status === 403)
-      throw new AnalysisError("Gemini API 키가 올바르지 않습니다. 왼쪽 설정에서 키를 확인해 주세요.", false);
-    if (res.status === 429) throw new AnalysisError("무료 사용량 한도(분당/일일 요청 수)를 초과했습니다. 잠시 후 다시 시도하거나 모델을 flash-lite로 바꿔 보세요.");
-    if (res.status === 404) throw new AnalysisError(`모델 '${model}'을(를) 찾을 수 없습니다. 다른 모델을 선택해 주세요.`, false);
-    if (res.status >= 500) throw new AnalysisError("Gemini 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해 주세요.");
-    throw new AnalysisError(`요청 오류(HTTP ${res.status}): ${data?.error?.message || ""}`, false);
+      throw new AnalysisError("Gemini API 키가 올바르지 않습니다. 왼쪽 설정에서 키를 확인해 주세요.", false, false);
+    if (res.status === 429) throw new AnalysisError("무료 사용량 한도 초과");
+    if (res.status === 404) throw new AnalysisError("이 키로 사용할 수 없는 모델", false, true);
+    if (res.status >= 500) throw new AnalysisError("서버 혼잡(일시 오류)");
+    throw new AnalysisError(`요청 오류(HTTP ${res.status}): ${data?.error?.message || ""}`, false, false);
   }
   const cand = data.candidates?.[0];
-  if (!cand) throw new AnalysisError("AI가 이 요청에 응답하지 않았습니다(안전 정책 등). 내용을 수정해 다시 시도해 주세요.", false);
-  if (cand.finishReason === "MAX_TOKENS") throw new AnalysisError("분석 결과가 너무 길어 중간에 끊겼습니다. 입력을 줄여 다시 시도해 주세요.");
+  if (!cand) throw new AnalysisError("AI가 이 요청에 응답하지 않았습니다(안전 정책 등). 내용을 수정해 다시 시도해 주세요.", false, false);
+  if (cand.finishReason === "MAX_TOKENS") throw new AnalysisError("응답이 길어 중간에 끊김");
   if (cand.finishReason && !["STOP", "FINISH_REASON_UNSPECIFIED"].includes(cand.finishReason))
-    throw new AnalysisError(`AI가 응답을 완료하지 못했습니다(${cand.finishReason}). 내용을 수정해 다시 시도해 주세요.`, false);
+    throw new AnalysisError(`AI가 응답을 완료하지 못했습니다(${cand.finishReason}). 내용을 수정해 다시 시도해 주세요.`, false, false);
   const text = (cand.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || "").join("");
   let report;
-  try { report = JSON.parse(text); } catch { throw new AnalysisError("AI 응답을 보고서 형식으로 해석하지 못했습니다. 다시 시도해 주세요."); }
+  try { report = JSON.parse(text); } catch { throw new AnalysisError("응답 형식 오류"); }
   const u = data.usageMetadata || {};
   return { report, usage: { input_tokens: u.promptTokenCount, output_tokens: u.candidatesTokenCount } };
 }
 
-async function withRetry(fn, onWait, waits = [5, 15]) {
-  for (let i = 0; ; i++) {
-    try { return await fn(); } catch (e) {
-      if (!(e instanceof AnalysisError) || !e.retryable || i >= waits.length) throw e;
-      onWait?.(waits[i]);
-      await new Promise((r) => setTimeout(r, waits[i] * 1000));
+// 선택한 모델(또는 auto 체인)로 시도하고, 한도 초과·혼잡·사용 불가면 다음 모델로 넘어간다.
+async function callWithFallback(apiKey, choice, userMessage, onTry) {
+  const chain = choice === "auto" ? AUTO_CHAIN : [choice];
+  const attempts = [];
+  for (const model of chain) {
+    onTry?.(model, attempts);
+    try {
+      const out = await callGemini(apiKey, model, userMessage);
+      attempts.push({ model, result: "성공" });
+      return { ...out, model, attempts };
+    } catch (e) {
+      attempts.push({ model, result: e.message });
+      if (!e.switchModel) throw Object.assign(e, { attempts });
     }
   }
+  const detail = attempts.map((a) => `${a.model}: ${a.result}`).join(" · ");
+  throw Object.assign(new AnalysisError(chain.length > 1
+    ? `무료 모델이 모두 한도 초과 또는 혼잡 상태입니다. 1~2분 뒤 다시 시도해 주세요. (${detail})`
+    : `${chain[0]} 사용 불가: ${attempts[0].result}. 모델을 '자동 선택'으로 바꿔 보세요.`), { attempts });
 }
 
 // ---------- 가드레일 (agent/guardrails.py 와 동일 규칙) ----------
@@ -148,31 +169,54 @@ function applyGuardrails(r, source) {
   return log;
 }
 
+
+// ---------- 분석 진행 표시 ----------
+const STAGES = ["입력 검증", "AI 요구사항 구조화 · 누락 정보 질문 생성", "근거 검증 (가드레일)", "보고서 생성"];
+let timer = null;
+function showProgress(stage, note = "") {
+  const t0 = state.t0;
+  const render = () => {
+    const sec = ((performance.now() - t0) / 1000).toFixed(0);
+    $("messages").innerHTML = `<div class="card progress"><h2 class="card-title"><span class="k">분석 중</span>AI Assistant가 요청을 분석하고 있습니다</h2>
+      <ol>${STAGES.map((s, i) => `<li class="${i < stage ? "done" : i === stage ? "now" : ""}"><span class="ic">${i < stage ? "✓" : ""}</span>${esc(s)}${i === 1 && note ? ` <span class="elapsed">· ${esc(note)}</span>` : ""}</li>`).join("")}</ol>
+      <p class="hint">경과 ${sec}초 · 보통 15~60초 걸립니다.</p></div>`;
+  };
+  clearInterval(timer);
+  render();
+  timer = setInterval(render, 1000);
+}
+function stopProgress() { clearInterval(timer); timer = null; }
+
 // ---------- 분석 실행 ----------
 async function runAnalysis(answers) {
   if (state.busy) return;
   const args = { taskName: $("taskName").value, problem: $("problem").value, improvement: $("improvement").value, answers };
   const errs = validateInput(args.taskName, args.problem);
-  if (errs.length) return showMessage("err", errs.join("<br>"));
+  if (errs.length) return showMessage("err", errs.map(esc).join("<br>"));
   const apiKey = $("apiKey").value.trim();
-  if (!apiKey) return showMessage("warn", `Gemini API 키를 왼쪽 설정에 입력해 주세요. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">무료 발급</a> · 키 없이 보려면 <b>결과 미리보기</b>를 누르세요.`);
+  if (!apiKey) return showMessage("warn", `Gemini API 키를 왼쪽 설정에 입력해 주세요 (<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">무료 발급</a>). 키 없이 보려면 <b>결과 미리보기</b>를 누르세요.`);
   rememberKey();
-  const model = $("model").value;
   state.lastArgs = args;
   setBusy(true);
-  showMessage("info", `<div class="progress"><div class="spinner"></div><div>AI Assistant가 요청을 분석하고 있습니다… <b>${esc(model)}</b> (보통 10~60초)<br><small>① 입력 검증 완료 → ② 요구사항 구조화 · 누락 정보 식별 · 질문 생성 중…</small></div></div>`);
-  const t0 = performance.now();
+  state.t0 = performance.now();
+  showProgress(1);
   try {
-    const { report, usage } = await withRetry(() => callGemini(apiKey, model, buildUserMessage(args)),
-      (s) => showMessage("warn", `Gemini가 일시적으로 바쁩니다. ${s}초 후 자동으로 다시 시도합니다…`));
-    const log = applyGuardrails(report, sourceText(args));
-    state.result = { report, guardrail_log: log, elapsed_sec: ((performance.now() - t0) / 1000).toFixed(1), model, usage, mode: "live" };
+    const out = await callWithFallback(apiKey, $("model").value, buildUserMessage(args), (m, tried) =>
+      showProgress(1, tried.length ? `${tried.at(-1).model} 실패(${tried.at(-1).result}) → ${m} 로 전환` : m));
+    showProgress(2);
+    const log = applyGuardrails(out.report, sourceText(args));
+    showProgress(3);
+    state.result = { report: out.report, guardrail_log: log, elapsed_sec: ((performance.now() - state.t0) / 1000).toFixed(1),
+      model: out.model, usage: out.usage, attempts: out.attempts, mode: "live" };
     state.answers = answers || [];
-    clearMessages();
-    renderResult();
+    stopProgress();
+    const switched = out.attempts.length > 1 ? `<div class="msg info">🔁 ${esc(out.attempts.slice(0, -1).map((a) => `${a.model}(${a.result})`).join(", "))} → <b>${esc(out.model)}</b>로 자동 전환해 분석했습니다.</div>` : "";
+    $("messages").innerHTML = switched;
+    renderResult(0);
   } catch (e) {
-    const retry = e.retryable !== false ? ` <button type="button" class="secondary" id="retryBtn">🔁 다시 시도</button>` : "";
-    showMessage("err", `분석에 실패했습니다. ${esc(e.message)}${retry}`);
+    stopProgress();
+    const retry = e.retryable !== false ? ` <button type="button" class="btn" id="retryBtn">다시 시도</button>` : "";
+    showMessage("err", `<span>분석에 실패했습니다. ${esc(e.message)}</span>${retry}`);
     $("retryBtn")?.addEventListener("click", () => runAnalysis(state.lastArgs?.answers || []));
   } finally {
     setBusy(false);
@@ -182,87 +226,69 @@ async function runAnalysis(answers) {
 function setBusy(b) {
   state.busy = b;
   $("analyzeBtn").disabled = b;
-  $("analyzeBtn").textContent = b ? "분석 중…" : "🔍 분석하기";
+  $("analyzeBtn").textContent = b ? "분석 중…" : "분석 시작";
 }
-function showMessage(kind, html) { $("messages").innerHTML = `<div class="msg ${kind}">${html}</div>`; }
-function clearMessages() { $("messages").innerHTML = ""; }
-
+function showMessage(kind, html) { stopProgress(); $("messages").innerHTML = `<div class="msg ${kind}">${html}</div>`; }
+function clearMessages() { stopProgress(); $("messages").innerHTML = ""; }
 function rememberKey() {
   if ($("rememberKey").checked) storage.set(KEY_STORE, $("apiKey").value.trim());
   else storage.del(KEY_STORE);
 }
 
-// ---------- 화면 렌더링 (F04) ----------
-function findingTable(items) {
-  const rows = (items || []).map((f) => `<tr><td>${badge(f.status)}</td><td>${esc(f.content)}</td><td>${esc(f.evidence) || "-"}</td></tr>`).join("");
-  return `<div class="table-wrap"><table><thead><tr><th>상태</th><th>내용</th><th>근거</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-
-function renderResult() {
+// ---------- 결과 화면 (F04) ----------
+function renderResult(step = 0) {
   const res = state.result, r = res.report;
   const sampleNote = res.mode === "sample"
-    ? `<div class="msg info">📂 미리 실행해 둔 <b>Gemini 분석 결과</b>(${esc(res.model)}, 분석 시간 ${esc(res.elapsed_sec)}초)입니다. 직접 분석하려면 API 키를 입력하고 <b>분석하기</b>를 누르세요.</div>` : "";
-  const steps = (r.as_is_process || []).map((s) => `<span class="step">${esc(s.step)} ${badge(s.status)}</span>`).join(" → ");
-  const stepRows = (r.as_is_process || []).map((s) => `<tr><td>${esc(s.order)}</td><td>${esc(s.step)}</td><td>${badge(s.status)}</td><td>${esc(s.evidence) || "-"}</td></tr>`).join("");
-  const cands = (r.candidates || []).map((c, i) => `<details ${i === 0 ? "open" : ""}><summary>후보 ${i + 1}. ${esc(c.title)}<span class="tag">${esc(c.type)}</span></summary>
-      <p>${esc(c.description)}</p><ul><li><b>해결 대상 문제</b>: ${esc(c.related_problem)}</li><li><b>기대 효과</b>: ${esc(c.expected_effect)}</li><li><b>검토 전 전제 조건</b>: ${esc(c.prerequisite)}</li></ul></details>`).join("");
-  const qs = (r.questions || []).map((q) => `<li><span class="tag">${esc(q.category)}</span> ${esc(q.question)}<small>└ ${esc(q.reason)}</small></li>`).join("") || "<li>추가 질문 없음</li>";
-  const unconf = (r.unconfirmed || []).map((u) => `<li>⚪ ${esc(u)}</li>`).join("");
-  const guard = res.guardrail_log.length
-    ? `<details><summary>🛡️ 자동 검증(가드레일) 교정 내역 ${res.guardrail_log.length}건</summary><div class="table-wrap"><table><thead><tr><th>유형</th><th>위치</th><th>내용</th></tr></thead><tbody>${res.guardrail_log.map((g) => `<tr><td>${esc(g.type)}</td><td>${esc(g.where)}</td><td>${esc(g.content)}</td></tr>`).join("")}</tbody></table></div></details>` : "";
-  const answerForm = (r.questions || []).length ? `<form id="answerForm" class="answers"><p>알고 있는 항목만 답해 주세요. 답변을 반영해 보고서를 다시 분석합니다.</p>
-      ${r.questions.map((q, i) => `<label for="ans${i}">${i + 1}. [${esc(q.category)}] ${esc(q.question)}</label><input type="text" id="ans${i}" data-q="${esc(q.question)}">`).join("")}
-      <button class="primary" type="submit">🔄 답변 반영하여 보고서 갱신</button></form>` : "<p>추가 질문이 없습니다.</p>";
-  const prevAnswers = state.answers.length ? `<h4>지금까지 반영된 답변</h4><ul>${state.answers.map((a) => `<li>Q. ${esc(a.question)}<br>A. ${esc(a.answer)}</li>`).join("")}</ul>` : "";
+    ? `<div class="msg info">📂 미리 실행해 둔 실제 Gemini 분석 결과입니다. 직접 분석하려면 API 키를 입력하고 <b>분석 시작</b>을 누르세요.</div>` : "";
+  const answerCard = (r.questions || []).length ? `<form id="answerForm" class="card answers-card">
+      <h2 class="card-title"><span class="k">F05</span>추가 질문에 답하고 보고서 갱신</h2>
+      <p class="hint">알고 있는 항목만 답해 주세요. 답변을 원문에 더해 다시 분석합니다.</p>
+      ${r.questions.map((q, i) => `<div class="q-input"><label for="ans${i}"><span class="cat">${esc(q.category)}</span><br>Q${i + 1}. ${esc(q.question)}</label>
+        <input type="text" id="ans${i}" data-q="${esc(q.question)}" placeholder="답변 (선택)"></div>`).join("")}
+      <div class="form-actions"><button class="btn primary" type="submit">답변 반영하여 보고서 갱신</button></div></form>` : "";
 
-  $("result").innerHTML = `<article class="panel report">
-    <h2>📄 분석 보고서 — ${esc(r.task_name)}</h2>
-    ${sampleNote}<div class="msg warn">${DISCLAIMER}</div>
-    <div class="metrics">
-      <div class="metric"><b>${esc(res.elapsed_sec)}초</b><span>분석 시간</span></div>
-      <div class="metric"><b>${(r.problems || []).length}</b><span>주요 문제점</span></div>
-      <div class="metric"><b>${(r.candidates || []).length}</b><span>개선 후보</span></div>
-      <div class="metric"><b>${(r.questions || []).length}</b><span>추가 질문</span></div>
-      <div class="metric"><b>${res.guardrail_log.length}</b><span>자동 교정</span></div>
+  $("result").innerHTML = `${sampleNote}
+    <div class="result-bar">
+      <div class="seg" role="group" aria-label="보기 방식">
+        <button type="button" data-view="paged" aria-pressed="${state.view === "paged"}">단계별 보기</button>
+        <button type="button" data-view="all" aria-pressed="${state.view === "all"}">전체 보기</button>
+      </div>
+      <button type="button" class="btn dark" id="downloadHtml">⬇ HTML 보고서 다운로드</button>
     </div>
-    <div class="tabs" role="tablist">
-      <button role="tab" aria-selected="true" data-tab="t-report">📋 보고서</button>
-      <button role="tab" aria-selected="false" data-tab="t-answer">❓ 추가 질문 답변</button>
-      <button role="tab" aria-selected="false" data-tab="t-md">⬇️ 다운로드</button>
-    </div>
-    <section class="tabpanel" id="t-report">
-      <h3>1. 업무 개요</h3><p>${esc(r.summary)}</p>
-      <p><b>업무 목적</b>: ${badge(r.task_purpose?.status)} ${esc(r.task_purpose?.content)}</p>
-      <h3>2. 현재 업무 방식 (AS-IS)</h3><p>${esc(r.as_is_description)}</p>
-      <div class="flow">${steps}</div>
-      <div class="table-wrap"><table><thead><tr><th>순서</th><th>업무 단계</th><th>상태</th><th>근거</th></tr></thead><tbody>${stepRows}</tbody></table></div>
-      <h3>3. 주요 문제점</h3>${findingTable(r.problems)}
-      <h3>4. 개선 목적 및 기대 효과</h3><p><b>개선 목적</b></p>${findingTable(r.improvement_goals)}<p><b>기대 효과</b></p>${findingTable(r.expected_effects)}
-      <h3>5. 개선 후 모습 (TO-BE, 검토용 가안)</h3><p>${esc(r.to_be_concept)}</p>
-      <h3>6. 개선 후보 (검토 후보)</h3>${cands}
-      <h3>7. 추가 확인 질문</h3><ol class="questions">${qs}</ol>
-      <h3>8. 분석 근거 및 미확인 사항</h3><p>${esc(r.analysis_basis)}</p><ul>${unconf}</ul>${guard}
-    </section>
-    <section class="tabpanel" id="t-answer" hidden>${answerForm}${prevAnswers}</section>
-    <section class="tabpanel" id="t-md" hidden>
-      <button class="primary" type="button" id="downloadMd">⬇️ Markdown 보고서 다운로드</button>
-      <pre class="md" id="mdPreview"></pre>
-    </section>
-  </article>`;
+    <div id="reportHost">${buildReport(res, state.answers)}</div>
+    ${answerCard}`;
 
-  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
-    document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
-    document.querySelectorAll(".tabpanel").forEach((p) => { p.hidden = p.id !== b.dataset.tab; });
+  const root = $("reportHost").querySelector(".rpt");
+  const slides = [...root.querySelectorAll(".slide")];
+  const links = [...root.querySelectorAll(".rpt-steps a")];
+  const go = (i, scroll = true) => {
+    state.step = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, k) => s.classList.toggle("current", k === state.step));
+    links.forEach((a, k) => { a.classList.toggle("active", k === state.step); a.classList.toggle("done", k < state.step); });
+    root.querySelector(".pager .prev").disabled = state.step === 0;
+    const next = root.querySelector(".pager .next");
+    next.disabled = state.step === slides.length - 1;
+    next.textContent = state.step < slides.length - 1 ? `다음: ${STEPS[state.step + 1].short} →` : "마지막 단계";
+    root.querySelector(".pager .pos").textContent = `${state.step + 1} / ${slides.length}`;
+    if (scroll) root.querySelector(".rpt-steps").scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const applyView = () => {
+    root.classList.toggle("paged", state.view === "paged");
+    document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === state.view)));
+  };
+  links.forEach((a, k) => a.addEventListener("click", (ev) => {
+    if (state.view !== "paged") return; // 전체 보기에서는 기본 앵커 이동
+    ev.preventDefault(); go(k);
   }));
-  const md = toMarkdown();
-  $("mdPreview").textContent = md;
-  $("downloadMd").addEventListener("click", () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([md], { type: "text/markdown;charset=utf-8" }));
-    a.download = `분석보고서_${r.task_name}.md`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
+  root.querySelector(".pager .prev").addEventListener("click", () => go(state.step - 1));
+  root.querySelector(".pager .next").addEventListener("click", () => go(state.step + 1));
+  document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+    state.view = b.dataset.view; storage.set(VIEW_STORE, state.view); applyView();
+  }));
+  applyView();
+  go(step, false);
+
+  $("downloadHtml").addEventListener("click", downloadHtml);
   $("answerForm")?.addEventListener("submit", (ev) => { // F05
     ev.preventDefault();
     const fresh = [...ev.target.querySelectorAll("input[data-q]")].filter((i) => i.value.trim())
@@ -273,24 +299,16 @@ function renderResult() {
   $("result").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ---------- Markdown 보고서 (F06, agent/report.py 와 동일 형식) ----------
-function toMarkdown() {
-  const res = state.result, r = res.report, cell = (s) => String(s || "").replace(/\|/g, "\\|").replace(/\n/g, " ");
-  const ft = (items) => ["| 상태 | 내용 | 근거 |", "|---|---|---|", ...(items || []).map((f) => `| ${BADGE[f.status]} | ${cell(f.content)} | ${cell(f.evidence) || "-"} |`)].join("\n");
-  const L = [`# 업무 개선 요청 분석 보고서 — ${r.task_name}`, "", `- 작성일시: ${new Date().toLocaleString("ko-KR")}`,
-    `- 분석 엔진: ${res.model} (AI 분석, 웹 버전)`, `- 추가 답변 반영: ${state.answers.length}건`, "", `> ${DISCLAIMER}`, "",
-    "## 1. 업무 개요", r.summary, "", `**업무 목적**: ${BADGE[r.task_purpose?.status] || ""} ${r.task_purpose?.content || ""}`, "",
-    "## 2. 현재 업무 방식 (AS-IS)", r.as_is_description, "", "| 순서 | 업무 단계 | 상태 | 근거 |", "|---|---|---|---|",
-    ...(r.as_is_process || []).map((s) => `| ${s.order} | ${cell(s.step)} | ${BADGE[s.status]} | ${cell(s.evidence) || "-"} |`),
-    "", "## 3. 주요 문제점", ft(r.problems), "", "## 4. 개선 목적 및 기대 효과", "**개선 목적**", ft(r.improvement_goals), "",
-    "**기대 효과**", ft(r.expected_effects), "", "## 5. 개선 후 모습 (TO-BE, 검토용 가안)", r.to_be_concept, "", "## 6. 개선 후보 (검토 후보)"];
-  (r.candidates || []).forEach((c, i) => L.push(`### 후보 ${i + 1}. ${c.title} \`${c.type}\``, c.description, "",
-    `- 해결 대상 문제: ${c.related_problem}`, `- 기대 효과: ${c.expected_effect}`, `- 검토 전 전제 조건: ${c.prerequisite}`, ""));
-  L.push("## 7. 추가 확인 질문", ...((r.questions || []).length ? r.questions.map((q, i) => `${i + 1}. **[${q.category}]** ${q.question}  \n   └ 필요한 이유: ${q.reason}`) : ["(추가 질문 없음)"]));
-  if (state.answers.length) L.push("", "### 반영된 추가 답변", ...state.answers.map((a) => `- Q. ${a.question}  \n  A. ${a.answer}`));
-  L.push("", "## 8. 분석 근거 및 미확인 사항", r.analysis_basis, "", "**미확인 사항**", ...((r.unconfirmed || []).length ? r.unconfirmed.map((u) => `- ${u}`) : ["- 없음"]));
-  if (res.guardrail_log.length) L.push("", "**자동 검증(가드레일) 교정 내역**", ...res.guardrail_log.map((g) => `- ${g.type} — ${g.where}: ${cell(g.content)}`));
-  return L.join("\n") + "\n";
+// ---------- HTML 보고서 다운로드 (F06) ----------
+async function downloadHtml() {
+  if (!state.css) state.css = await fetch("report.css?v=2").then((r) => r.text()).catch(() => "");
+  const r = state.result.report;
+  const html = standaloneHTML(buildReport(state.result, state.answers), state.css, `분석 보고서 — ${r.task_name}`);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+  a.download = `분석보고서_${r.task_name.replace(/[\\/:*?"<>|]/g, "_")}.html`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // ---------- 샘플 ----------
@@ -305,22 +323,29 @@ function showSampleResult() {
   const s = state.samples[c.id];
   loadSample();
   if (!s) return showMessage("warn", "이 사례는 미리 실행해 둔 결과가 없습니다. API 키를 입력하고 직접 분석해 보세요.");
-  state.result = { report: structuredClone(s.report), guardrail_log: s.guardrail_log, elapsed_sec: s.metrics.elapsed_sec, model: "Gemini (사전 실행)", usage: {}, mode: "sample" };
-  renderResult();
+  state.result = { report: structuredClone(s.report), guardrail_log: s.guardrail_log, elapsed_sec: s.metrics.elapsed_sec,
+    model: `${s.metrics.model || "gemini-3.8-flash"} (사전 실행)`, date: "2026-11-17", usage: {}, mode: "sample" };
+  renderResult(0);
 }
 
 // ---------- 초기화 ----------
 async function init() {
+  $("model").innerHTML = MODELS.map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join("");
   const saved = storage.get(KEY_STORE);
   if (saved) { $("apiKey").value = saved; $("rememberKey").checked = true; }
+  state.view = storage.get(VIEW_STORE) || "paged";
   $("rememberKey").addEventListener("change", rememberKey);
+  $("model").addEventListener("change", () => {
+    $("modelHint").textContent = $("model").value === "auto"
+      ? "한도 초과·혼잡 시 다음 무료 모델로 자동 전환합니다." : "선택한 모델만 사용합니다. 실패하면 '자동 선택'을 권장합니다.";
+  });
   $("requestForm").addEventListener("submit", (e) => { e.preventDefault(); runAnalysis([]); });
   $("loadSample").addEventListener("click", loadSample);
   $("showSampleResult").addEventListener("click", showSampleResult);
   try {
     const [cases, samples] = await Promise.all([fetch("data/test_cases.json").then((r) => r.json()), fetch("data/sample_results.json").then((r) => r.json()).catch(() => ({}))]);
     state.cases = cases; state.samples = samples;
-    $("sampleSelect").innerHTML = cases.map((c) => `<option value="${esc(c.id)}">${esc(c.id)} ${esc(c.title)}</option>`).join("");
+    $("sampleSelect").innerHTML = cases.map((c) => `<option value="${esc(c.id)}">${esc(c.id)} · ${esc(c.title)}</option>`).join("");
   } catch {
     $("sampleSelect").innerHTML = "<option>샘플을 불러오지 못했습니다</option>";
   }

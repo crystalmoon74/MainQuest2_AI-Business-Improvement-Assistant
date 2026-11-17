@@ -8,7 +8,8 @@
 
 ### 🌐 바로 써 보기: https://crystalmoon74.github.io/MainQuest2_AI-Business-Improvement-Assistant/
 - API 키 없이: 왼쪽 **샘플 업무 사례** → **결과 미리보기** (미리 실행해 둔 Gemini 분석 결과)
-- 직접 분석: [Google AI Studio](https://aistudio.google.com/apikey)에서 **무료 Gemini 키** 발급 → 왼쪽 설정에 입력 → **분석하기**
+- 직접 분석: [Google AI Studio](https://aistudio.google.com/apikey)에서 **무료 Gemini 키** 발급 → 왼쪽 설정에 입력 → **분석 시작**
+- 결과는 **STEP 1~7 슬라이드**(단계별 보기 / 전체 보기)로 보여 주고, **HTML 보고서**로 내려받을 수 있습니다.
   (키는 방문자 브라우저에서 Google API로만 전송되며 사이트에는 저장되지 않습니다)
 
 ![분석 보고서 화면](docs/images/02_report.jpg)
@@ -30,9 +31,10 @@
 | F01 | 업무 개선 요청 입력 | 업무명·문제점(필수), 개선 희망(선택) 입력 + 필수값 검증 메시지 |
 | F02 | AI 요구사항 분석 | 업무 목적, AS-IS 절차, 문제점, 개선 목적·기대효과, To-Be 가안, 개선 후보 |
 | F03 | 누락 정보 식별·질문 | 7개 점검 범주 기준 최대 10개 질문, 이미 확인된 범주는 질문 제외 |
-| F04 | 분석 보고서 표시 | 8개 섹션 표준 보고서, 모든 사실에 ✅확인 / 🟡추정 / ⚪미확인 + 근거 표시 |
+| F04 | 분석 보고서 표시 | 표지(요약·핵심 지표) + **STEP 1~7 슬라이드**(업무 개요 → AS-IS 흐름 → 문제점 → 목적·효과 → TO-BE·개선 후보 → 추가 질문 → 근거·검증). 모든 사실에 확인/추정/미확인 배지와 원문 근거 표시 |
 | F05 | 추가 답변 반영 | 질문에 답하면 원 요청+답변으로 재분석해 보고서 갱신 |
-| F06 | 보고서 다운로드 | Markdown 다운로드 |
+| F06 | 보고서 다운로드 | 슬라이드형 **HTML 보고서** 다운로드 (CSS 내장, 단계 목차, 인쇄 시 단계별 페이지 나눔) |
+| 안정성 | 무료 모델 자동 전환 | 한도 초과(429)·혼잡(503)·사용 불가(404)면 다음 무료 Gemini 모델로 자동 전환 |
 | 신뢰성 | 가드레일 | '확인'인데 원문에 인용 근거가 없으면 자동으로 '추정'으로 강등하고 교정 내역 표시 |
 
 ## 2. 동작 구조 (단일 Agent)
@@ -60,10 +62,11 @@ agent/analyzer.py       Agent 절차(검증→분석→가드레일), 엔진 선
 agent/adk_agent.py      Google ADK LlmAgent + Gemini 호출 (기본 엔진)
 agent/guardrails.py     사실 확정 오류 자동 교정
 agent/baseline.py       규칙 기반 비교 기준선 / 데모 모드
-agent/report.py         Markdown 보고서 생성
+agent/html_report.py    슬라이드형 HTML 보고서 (web/report.css 공용)
+agent/report.py         Markdown 보고서 (평가 결과 저장용)
 samples/test_cases.json PRD 테스트 사례 T01~T05
 eval/run_eval.py        일괄 평가 스크립트
-web/                    GitHub Pages 웹 버전 (index.html, app.js, 자동 생성 config.js·data/)
+web/                    GitHub Pages 웹 버전 (index.html, app.js, report.js, report.css, 자동 생성 config.js·data/)
 scripts/export_web_config.py  Python 프롬프트·스키마·평가 결과 → web/ 내보내기
 .github/workflows/pages.yml   web/ 변경 시 GitHub Pages 자동 배포
 ```
@@ -92,7 +95,18 @@ macOS/Linux:
 ```bash
 export GOOGLE_API_KEY=AIza...
 ```
-- 기본 모델은 `gemini-3.8-flash`(무료 티어). 무료 한도(분당·일일 요청 수)를 넘으면 `GEMINI_MODEL=gemini-3.5-flash-lite`처럼 바꿔 쓸 수 있습니다.
+- 기본값은 **자동 선택**(`GEMINI_MODEL=auto`): 아래 무료 모델을 차례로 시도하고, 한도 초과·혼잡이면 다음 모델로 넘어갑니다.
+
+  | 순서 | 모델 | 특징 |
+  |---|---|---|
+  | 1 | `gemini-3.8-flash` | 최신 Flash (기본) |
+  | 2 | `gemini-3.6-flash` | 이전 세대 Flash |
+  | 3 | `gemini-3-flash-preview` | Flash 프리뷰 |
+  | 4 | `gemini-3.1-flash-lite` | 가볍고 빠름 |
+  | 5 | `gemini-3.5-flash-lite` | 가볍고 빠름 |
+  | 선택 | `gemini-4-hydrogen` | 고품질, 느림(1분 이상) — 직접 선택 시에만 |
+
+  특정 모델만 쓰려면 `GEMINI_MODEL=gemini-3.6-flash`처럼 지정하거나 화면에서 고릅니다. (2026-11 기준 `gemini-2.5-*`는 신규 사용자에게 제공되지 않음)
 - 무료 티어는 입력 내용이 Google 제품 개선에 활용될 수 있으므로 **가상·익명 사례만** 입력하세요.
 - 키가 없으면 **규칙 기반 데모 모드**(AI 미사용)로만 동작합니다. `ANTHROPIC_API_KEY`가 있으면 Claude(유료)도 선택할 수 있습니다.
 
@@ -121,14 +135,17 @@ python scripts/export_web_config.py
 ## 4. 시연
 공개 데모(웹 버전)에서 T01 "구매 승인 프로세스 개선 요청"을 Gemini로 분석한 결과입니다.
 
-**① 요청 입력** — 업무명·문제점(필수), 개선 희망(선택). 샘플 사례 불러오기 지원
+**① 요청 입력** — 업무명·문제점(필수), 개선 희망(선택). 무료 모델 자동 선택, 샘플 사례 불러오기
 ![입력 화면](docs/images/01_input.jpg)
 
-**② 분석 보고서** — 지표 요약, AS-IS 절차 흐름(확인/추정 배지), 원문 근거 표
-![분석 보고서](docs/images/02_report.jpg)
+**② 보고서 표지와 단계 목차** — 요약, 핵심 지표, STEP 1~7 이동 (단계별 보기 / 전체 보기 / HTML 다운로드)
+![보고서 표지](docs/images/02_report.jpg)
 
-**③ 개선 후보와 추가 확인 질문** — 시스템·프로세스 대안을 검토 후보로 제시, 범주별 질문과 필요한 이유
-![개선 후보와 질문](docs/images/03_candidates_questions.jpg)
+**③ STEP 2 · 현재 업무(AS-IS)** — 업무 흐름 카드(점선 = 추정), 단계별 원문 근거
+![AS-IS](docs/images/03_step_asis.jpg)
+
+**④ STEP 5 · 개선 방향** — AS-IS ↔ TO-BE 비교, 유형별 개선 후보 카드
+![TO-BE와 개선 후보](docs/images/04_step_tobe.jpg)
 
 **Gemini 평가 요약 (T01~T05)** — 자세한 내용은 [개선 효과 검증](docs/03_개선효과검증.md)
 | 지표 | 결과 |
