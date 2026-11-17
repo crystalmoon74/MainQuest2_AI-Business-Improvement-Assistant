@@ -82,11 +82,22 @@ def analyze(task_name: str, problem: str, improvement: str = "", answers: list |
         if not gemini_key_available():
             raise AnalysisError("GOOGLE_API_KEY 환경변수가 없습니다. Google AI Studio에서 무료 키를 발급해 설정해 주세요.",
                                 retryable=False)
-        (report, usage), model = call_gemini_adk(msg), GEMINI_MODEL
+        (report, usage), model = _with_retry(lambda: call_gemini_adk(msg)), GEMINI_MODEL
 
     report, log = apply_guardrails(report, source_text(task_name, problem, improvement, answers))
     return AnalysisResult(report=report, guardrail_log=log, elapsed_sec=round(time.perf_counter() - start, 1),
                           mode=mode, model=model, usage=usage)
+
+
+def _with_retry(fn, waits=(5, 15)):
+    """무료 티어에서 잦은 일시 오류(503 과부하, 429 분당 한도)는 잠시 기다렸다가 자동 재시도."""
+    for wait in (*waits, None):
+        try:
+            return fn()
+        except AnalysisError as e:
+            if not e.retryable or wait is None:
+                raise
+            time.sleep(wait)
 
 
 def _call_claude(user_message: str) -> tuple[AnalysisReport, dict]:

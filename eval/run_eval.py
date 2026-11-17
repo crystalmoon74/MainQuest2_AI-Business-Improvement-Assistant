@@ -70,11 +70,23 @@ def main():
         rows.append({"id": c["id"], "title": c["title"], **m})
         print("   ", m, flush=True)
 
+    # 이번 실행에서 실패했거나 --only로 건너뛴 사례는 이전에 저장된 성공 결과를 사용
+    done = {r["id"] for r in rows if "error" not in r}
+    for c in json.loads((ROOT / "samples" / "test_cases.json").read_text(encoding="utf-8")):
+        f = out / f"{c['id']}.json"
+        if c["id"] not in done and f.exists():
+            rows = [r for r in rows if r["id"] != c["id"]]
+            rows.append({"id": c["id"], "title": c["title"], **json.loads(f.read_text(encoding="utf-8"))["metrics"]})
+    rows.sort(key=lambda r: r["id"])
+
     keys = ["id", "title", "elapsed_sec", "as_is_steps", "problems", "candidates", "questions", "status_확인",
             "status_추정", "status_미확인", "fabrication_flags", "check_category_coverage", "dup_questions_after_guard"]
     lines = [f"# 평가 결과 요약 ({a.mode})", "", "| " + " | ".join(keys) + " |", "|" + "---|" * len(keys)]
     for r in rows:
-        lines.append("| " + " | ".join(str(r.get(k, r.get("error", ""))) for k in keys) + " |")
+        if "error" in r:
+            lines.append(f"| {r['id']} | {r['title']} | 실패: {r['error']} |" + " |" * (len(keys) - 3))
+        else:
+            lines.append("| " + " | ".join(str(r.get(k, "")) for k in keys) + " |")
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
 
